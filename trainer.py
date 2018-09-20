@@ -118,7 +118,7 @@ class Trainer:
             # Visualize one generated image each 10 epoch
             if (epoch + 1) % 10 == 0:
                 fake_img = fake[0]
-                self.visualize(fake_img, epoch)
+                self.visualize(fake_img, epoch + 1)
 
             # Save models each 100 epochs
             if (epoch + 1) % 100 == 0:

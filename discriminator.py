@@ -17,14 +17,21 @@ class Discriminator(gluon.HybridBlock):
             self.stages = nn.HybridSequential()
 
             self.stages.add(nn.Conv2D(self.opts.d_h_size, 4, strides=2, padding=1, use_bias=False, **self.init))
-            self.stages.add(nn.SELU())
+            if self.opts.with_selu:
+                self.stages.add(nn.SELU())
+            else:
+                self.stages.add(nn.LeakyReLU(0.2))
 
             new_img_size = opts.img_size // 2
             mult = 1
 
             while new_img_size > 4:
                 self.stages.add(nn.Conv2D(self.opts.g_h_size * (2 * mult), 4, strides=2, padding=1, use_bias=False, **self.init))
-                self.stages.add(nn.SELU())
+                if self.opts.with_selu:
+                    self.stages.add(nn.SELU())
+                else:
+                    self.stages.add(nn.BatchNorm())
+                    self.stages.add(nn.LeakyReLU(0.2))
 
                 new_img_size = new_img_size // 2
                 mult *= 2

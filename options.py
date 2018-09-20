@@ -1,16 +1,17 @@
 import mxnet as mx
+import os
 
 
 class Options:
 
     def __init__(self, image_size, data_root, output_dir, use_gpu=True):
         try:
-            self.ctx = mx.gpu if use_gpu else mx.cpu()
+            self.ctx = mx.gpu() if use_gpu else mx.cpu()
         except:
             self.ctx = mx.cpu()
 
         self.data_root = data_root
-        self.output_dir = output_dir
+        self.output_dir = os.path.join(output_dir, 'dc-gan')
         self.epochs = 200
         self.batch_size = 32
         self.img_size = image_size
@@ -24,3 +25,4 @@ class Options:
         self.beta1 = 0.5
         self.beta2 = 0.999
         self.wd = 0
+        self.visualize = False

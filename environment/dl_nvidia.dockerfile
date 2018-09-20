@@ -1,5 +1,5 @@
 ARG BASE_VERSION=latest
-FROM dl_base:${BASE_VERSION}
+FROM wallart/dl_base:${BASE_VERSION}
 LABEL Author 'Julien WALLART'
 
 WORKDIR /tmp
@@ -75,3 +75,4 @@ RUN echo "LD_LIBRARY_PATH=/usr/local/nvidia/lib64:/usr/local/cuda/lib64" >> /etc
 RUN echo "LIBRARY_PATH=/usr/local/cuda/lib64/stubs" >> /etc/environment
 
 WORKDIR /
+ENTRYPOINT ["/usr/sbin/bootstrap"]

@@ -1,5 +1,5 @@
 ARG NVIDIA_STACK_VERSION=latest
-FROM dl_nvidia:${NVIDIA_STACK_VERSION}
+FROM wallart/dl_nvidia:${NVIDIA_STACK_VERSION}
 LABEL Author='Julien WALLART'
 
 WORKDIR /tmp
@@ -56,6 +56,14 @@ COPY config.mk mxnet-${MXNET_VERSION}/.
 RUN cd mxnet-${MXNET_VERSION} && make -j$(nproc)
 
 SHELL ["/bin/bash", "-c"]
+
+# Install runtime dependencies
+RUN /opt/miniconda3/bin/conda create -n intelmkl-dnn mkl-dnn
+# Prepare env variables for all users
+# Docker interactive mode
+ENV LD_LIBRARY_PATH /opt/miniconda3/envs/intelmkl-dnn/lib:${LD_LIBRARY_PATH}
+# For interactive login session
+RUN echo "LD_LIBRARY_PATH=/opt/miniconda3/envs/intelmkl-dnn/lib:${LD_LIBRARY_PATH}" >> /etc/environment
 
 # Install MXNet
 RUN source /opt/miniconda3/bin/activate intelpython2; \

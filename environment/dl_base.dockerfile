@@ -10,6 +10,7 @@ RUN apt update && apt install -y passwd openssh-server make gcc g++ unzip net-to
 
 # Configure sshd
 RUN ssh-keygen -A
+
 # sshd ubuntu fix
 RUN mkdir -p /run/sshd; cd /run/sshd; ln -s /etc/localtime localtime
 
@@ -46,3 +47,9 @@ RUN chmod 755 /usr/local/bin/mungehosts
 # Provide gosu
 ADD https://github.com/tianon/gosu/releases/download/1.10/gosu-amd64 /usr/local/bin/gosu
 RUN chmod 755 /usr/local/bin/gosu
+
+# Runit startup
+COPY bootstrap.sh /usr/sbin/bootstrap
+RUN chmod 755 /usr/sbin/bootstrap
+
+ENTRYPOINT ["/usr/sbin/bootstrap"]

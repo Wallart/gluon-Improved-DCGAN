@@ -13,18 +13,20 @@ echo "Starting as ${USER_ID}:${USER_NAME}"
 id -u $USER_NAME &> /dev/null
 if [ $? -ne 0 ]; then
     # Without creating home dir because it could be a nfs mount
-    useradd --shell /bin/bash -u $USER_ID -o -c "" $USER_NAME
+    useradd --shell /bin/bash -u $USER_ID -M -o -c "" $USER_NAME
     echo $USER_NAME:$USER_NAME | chpasswd
 
     # The first client of NFS will create the home dir
     if [ ! -d "/home/${USER_NAME}" ]; then
         mkdir -p /home/$USER_NAME
+        echo "${USER_NAME} home directory ready"
     fi
 
     # And will populate with scripts from skel
     if [ -z "$(ls -A /home/${USER_NAME})" ]; then
         cp /etc/skel/.bash* /home/$USER_NAME
         chown -R $USER_NAME:$USER_NAME /home/$USER_NAME
+        echo "${USER_NAME} home directory populated"
     fi
 fi
 

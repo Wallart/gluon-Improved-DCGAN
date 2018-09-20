@@ -20,22 +20,10 @@ def facc(label, pred):
 
 class Trainer:
 
-    def __init__(self, epochs, batch_size, img_size, ctx, g_lr, d_lr, latent_z_size, weight_decay):
-        self.epochs = epochs
-        self.batch_size = batch_size
-        self.img_size = img_size
-        self.ctx = ctx
-
-        self.outdir = '/home/wallart/Desktop/'
-        self.dataset = 'cifar10'
-
-        self.g_lr = g_lr
-        self.d_lr = d_lr
-        self.latent_z_size = latent_z_size
-        self.wd = weight_decay
-
-        self.d = Discriminator(img_size=img_size)
-        self.g = Generator(img_size=img_size, z_size=latent_z_size)
+    def __init__(self, opts):
+        self.opts = opts
+        self.d = Discriminator(opts)
+        self.g = Generator(opts)
 
         self.stamp = datetime.now().strftime('%Y_%m_%d-%H_%M')
         logging.basicConfig(level=logging.DEBUG)
@@ -43,26 +31,28 @@ class Trainer:
     def visualize(self, img_arr):
         plt.imshow(((img_arr.asnumpy().transpose(1, 2, 0) + 1.0) * 127.5).astype(np.uint8))
         plt.axis('off')
+        plt.show()
+        #plt.savefig(os.path.join(self.outdir, '{}.png'.format(epoch)))
 
     def train(self, train_data):
 
-        real_label = nd.ones((self.batch_size,), ctx=self.ctx)
-        fake_label = nd.zeros((self.batch_size,), ctx=self.ctx)
+        real_label = nd.ones((self.opts.batch_size,), ctx=self.opts.ctx)
+        fake_label = nd.zeros((self.opts.batch_size,), ctx=self.opts.ctx)
 
         metric = mx.metric.CustomMetric(facc)
 
-        self.g.initialize()
-        self.d.initialize()
+        self.g.initialize(ctx=self.opts.ctx)
+        self.d.initialize(ctx=self.opts.ctx)
 
-        g_params = {'learning_rate': self.g_lr, 'wd': self.wd, 'beta1': 0.5, 'beta2': 0.999}
-        d_params = {'learning_rate': self.d_lr, 'wd': self.wd, 'beta1': 0.5, 'beta2': 0.999}
+        g_params = {'learning_rate': self.opts.g_lr, 'wd': self.opts.wd, 'beta1': 0.5, 'beta2': 0.999}
+        d_params = {'learning_rate': self.opts.d_lr, 'wd': self.opts.wd, 'beta1': 0.5, 'beta2': 0.999}
 
         g_trainer = gluon.Trainer(self.g.collect_params(), 'Adam', g_params)
         d_trainer = gluon.Trainer(self.d.collect_params(), 'Adam', d_params)
 
         loss = gluon.loss.SigmoidBinaryCrossEntropyLoss()
 
-        for epoch in range(self.epochs):
+        for epoch in range(self.opts.epochs):
             fake = None
             tic = time.time()
             btic = time.time()
@@ -71,8 +61,8 @@ class Trainer:
                 ############################
                 # (1) Update D network: maximize log(D(x)) + log(1 - D(G(z)))
                 ###########################
-                data = d.as_in_context(self.ctx)
-                latent_z = mx.nd.random_normal(0, 1, shape=(self.batch_size, self.latent_z_size, 1, 1), ctx=self.ctx)
+                data = d.as_in_context(self.opts.ctx)
+                latent_z = nd.random_normal(0, 1, shape=(self.opts.batch_size, self.opts.latent_z_size, 1, 1), ctx=self.opts.ctx)
 
                 with autograd.record():
                     # Train with real image
@@ -88,7 +78,7 @@ class Trainer:
                     err_d.backward()
                     metric.update([fake_label, ], [output, ])
 
-                d_trainer.step(self.batch_size)
+                d_trainer.step(self.opts.batch_size)
 
                 ############################
                 # (2) Update G network: maximize log(D(G(z)))
@@ -100,12 +90,12 @@ class Trainer:
                     err_g = loss(output, real_label)
                     err_g.backward()
 
-                g_trainer.step(self.batch_size)
+                g_trainer.step(self.opts.batch_size)
 
                 # Print log info every 10 batches
                 if i % 10 == 0:
                     name, acc = metric.get()
-                    logging.info('Speed: {} samples/s'.format(self.batch_size / (time.time() - btic)))
+                    logging.info('speed: {} samples/s'.format(self.opts.batch_size / (time.time() - btic)))
                     logging.info(
                         'discriminator loss = %f, generator loss = %f, binary training acc = %f at iter %d epoch %d'
                         % (nd.mean(err_d).asscalar(),
@@ -118,7 +108,7 @@ class Trainer:
             logging.info('\nbinary training acc at epoch {}: {}={}'.format(epoch, name, acc))
             logging.info('time: {}'.format(time.time() - tic))
 
-            # Visualize one generated image for each epoch
-            fake_img = fake[0]
-            self.visualize(fake_img)
-            plt.show()
+            # Visualize one generated image each 10 epoch
+            if epoch % 10 == 0:
+                fake_img = fake[0]
+                self.visualize(epoch, fake_img)

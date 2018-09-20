@@ -6,13 +6,9 @@ import mxnet as mx
 
 class Discriminator(gluon.HybridBlock):
 
-    def __init__(self, img_size=64, hidden_size=128, n_colors=3, *args, **kwargs):
+    def __init__(self, opts, *args, **kwargs):
         super(Discriminator, self).__init__(*args, **kwargs)
-
-        self.img_size = img_size
-        self.h_size = hidden_size
-        self.n_colors = n_colors
-
+        self.opts = opts
         self.init = {
             'weight_initializer': mx.init.Normal(0.02)
         }
@@ -20,14 +16,14 @@ class Discriminator(gluon.HybridBlock):
         with self.name_scope():
             self.stages = nn.HybridSequential()
 
-            self.stages.add(nn.Conv2D(self.h_size, 4, strides=2, padding=1, use_bias=False, **self.init))
+            self.stages.add(nn.Conv2D(self.opts.d_h_size, 4, strides=2, padding=1, use_bias=False, **self.init))
             self.stages.add(nn.SELU())
 
-            new_img_size = img_size // 2
+            new_img_size = opts.image_size // 2
             mult = 1
 
             while new_img_size > 4:
-                self.stages.add(nn.Conv2D(self.h_size * (2 * mult), 4, strides=2, padding=1, use_bias=False, **self.init))
+                self.stages.add(nn.Conv2D(self.opts.g_h_size * (2 * mult), 4, strides=2, padding=1, use_bias=False, **self.init))
                 self.stages.add(nn.SELU())
 
                 new_img_size = new_img_size // 2

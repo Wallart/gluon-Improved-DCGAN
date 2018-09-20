@@ -23,7 +23,7 @@ if [ $? -ne 0 ]; then
     fi
 
     # And will populate with scripts from skel
-    if [ -z "$(ls -A /home/${USER_NAME})" ]; then
+    if [ -z $(find /home/${USER_NAME} -name ".bash*") ]; then
         cp /etc/skel/.bash* /home/$USER_NAME
         chown -R $USER_NAME:$USER_NAME /home/$USER_NAME
         echo "${USER_NAME} home directory populated"

@@ -10,6 +10,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import time
 import logging
+import os
 
 
 def facc(label, pred):
@@ -28,11 +29,17 @@ class Trainer:
         self.stamp = datetime.now().strftime('%Y_%m_%d-%H_%M')
         logging.basicConfig(level=logging.DEBUG)
 
-    def visualize(self, img_arr):
+    def visualize(self, img_arr, epoch):
         plt.imshow(((img_arr.asnumpy().transpose(1, 2, 0) + 1.0) * 127.5).astype(np.uint8))
         plt.axis('off')
-        plt.show()
-        #plt.savefig(os.path.join(self.outdir, '{}.png'.format(epoch)))
+        if self.opts.visualize:
+            plt.show()
+        else:
+            base_path = os.path.join(self.opts.output_dir, self.stamp, 'images')
+            if not os.path.isdir(base_path):
+                os.makedirs(base_path)
+
+            plt.savefig(os.path.join(base_path, '{}.png'.format(epoch)))
 
     def train(self, train_data):
 
@@ -109,6 +116,20 @@ class Trainer:
             logging.info('time: {}'.format(time.time() - tic))
 
             # Visualize one generated image each 10 epoch
-            if epoch % 10 == 0:
+            if (epoch + 1) % 10 == 0:
                 fake_img = fake[0]
-                self.visualize(epoch, fake_img)
+                self.visualize(fake_img, epoch)
+
+            # Save models each 100 epochs
+            if (epoch + 1) % 100 == 0:
+                self.save_models(epoch)
+        self.save_models(self.opts.epochs)
+
+    def save_models(self, epoch):
+        base_path = os.path.join(self.opts.output_dir, self.stamp, 'models')
+
+        if not os.path.isdir(base_path):
+            os.makedirs(base_path)
+
+        self.g.collect_params().save(os.path.join(base_path, 'd-{}-epochs.params'.format(epoch)))
+        self.d.collect_params().save(os.path.join(base_path, 'g-{}-epochs.params'.format(epoch)))

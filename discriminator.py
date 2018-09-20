@@ -19,7 +19,7 @@ class Discriminator(gluon.HybridBlock):
             self.stages.add(nn.Conv2D(self.opts.d_h_size, 4, strides=2, padding=1, use_bias=False, **self.init))
             self.stages.add(nn.SELU())
 
-            new_img_size = opts.image_size // 2
+            new_img_size = opts.img_size // 2
             mult = 1
 
             while new_img_size > 4:

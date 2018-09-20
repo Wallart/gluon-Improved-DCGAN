@@ -21,7 +21,7 @@ class Generator(gluon.HybridBlock):
             'weight_initializer': mx.init.Normal(0.02)
         }
 
-        mult = self.opts.image_size // 8
+        mult = self.opts.img_size // 8
 
         with self.name_scope():
             self.stages = nn.HybridSequential()

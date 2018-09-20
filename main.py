@@ -10,7 +10,7 @@ import numpy as np
 
 def get_transformer(opts):
     def transformer(data, label):
-        data = mx.image.imresize(data, opts.image_size, opts.image_size)
+        data = mx.image.imresize(data, opts.img_size, opts.img_size)
         data = nd.transpose(data, (2, 0, 1))
         data = data.astype(np.float32) / (128.0 - 1.0)
         return data, label

@@ -21,30 +21,47 @@ class Generator(gluon.HybridBlock):
             'weight_initializer': mx.init.Normal(0.02)
         }
 
-        mult = self.opts.img_size // 8
+        #mult = self.opts.img_size // 8
 
         with self.name_scope():
             self.stages = nn.HybridSequential()
 
-            self.stages.add(nn.Conv2DTranspose(self.opts.g_h_size * mult, 4, strides=1, padding=0, use_bias=False, **self.init))
+            # input is Z, going into a convolution
+            self.stages.add(nn.Conv2DTranspose(self.opts.g_h_size * 8, 4, 1, 0, use_bias=False, **self.init))
             if self.opts.with_selu:
                 self.stages.add(nn.SELU())
             else:
                 self.stages.add(nn.BatchNorm())
                 self.stages.add(nn.Activation('relu'))
 
-            while mult > 1:
-                self.stages.add(nn.Conv2DTranspose(self.opts.g_h_size * (mult // 2), 4, strides=2, padding=1, use_bias=False, **self.init))
-                if self.opts.with_selu:
-                    self.stages.add(nn.SELU())
-                else:
-                    self.stages.add(nn.BatchNorm())
-                    self.stages.add(nn.Activation('relu'))
-                mult = mult // 2
+            # state size. (self.opts.g_h_size*8) x 4 x 4
+            self.stages.add(nn.Conv2DTranspose(self.opts.g_h_size * 4, 4, 2, 1, use_bias=False, **self.init))
+            if self.opts.with_selu:
+                self.stages.add(nn.SELU())
+            else:
+                self.stages.add(nn.BatchNorm())
+                self.stages.add(nn.Activation('relu'))
 
-            # End block
-            self.stages.add(nn.Conv2DTranspose(self.opts.num_colors, 4, strides=2, padding=1, use_bias=False, **self.init))
+            # state size. (self.opts.g_h_size*8) x 8 x 8
+            self.stages.add(nn.Conv2DTranspose(self.opts.g_h_size * 2, 4, 2, 1, use_bias=False, **self.init))
+            if self.opts.with_selu:
+                self.stages.add(nn.SELU())
+            else:
+                self.stages.add(nn.BatchNorm())
+                self.stages.add(nn.Activation('relu'))
+
+            # state size. (self.opts.g_h_size*8) x 16 x 16
+            self.stages.add(nn.Conv2DTranspose(self.opts.g_h_size, 4, 2, 1, use_bias=False, **self.init))
+            if self.opts.with_selu:
+                self.stages.add(nn.SELU())
+            else:
+                self.stages.add(nn.BatchNorm())
+                self.stages.add(nn.Activation('relu'))
+                
+            # state size. (self.opts.g_h_size*8) x 32 x 32
+            self.stages.add(nn.Conv2DTranspose(self.opts.num_colors, 4, 2, 1, use_bias=False, **self.init))
             self.stages.add(nn.Activation('tanh'))
+            # state size. (nc) x 64 x 64
 
     def hybrid_forward(self, F, x, *args, **kwargs):
         return self.stages(x)

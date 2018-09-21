@@ -12,11 +12,10 @@ def get_transformer(opts):
     def transformer(data, label):
         data = mx.image.imresize(data, opts.img_size, opts.img_size)
         data = nd.transpose(data, (2, 0, 1))
-        data = data.astype(np.float32) / (128.0 - 1.0)
+        data = (data.astype(np.float32) / 128.0) - 1.0
+        if data.shape[0] == 1:
+            data = nd.tile(data, (3, 1, 1))
         return data, label
-        # if data.shape[0] == 1:
-        #     data = nd.tile(data, (3, 1, 1))
-        # return data.reshape((1,) + data.shape)
     return transformer
 
 
@@ -31,7 +30,7 @@ def get_dataset_from_folder(opts):
 
 
 if __name__ == '__main__':
-    options = Options(32, '/home/wallart/datasets/lfw-deepfunneled', '/home/wallart/models')
+    options = Options(64, '/home/wallart/Datasets/Raw/lfw-deepfunneled', '/home/wallart/Models')
     train_dataset, _ = get_dataset_from_folder(options)
     trainer = Trainer(options)
     trainer.train(train_dataset)

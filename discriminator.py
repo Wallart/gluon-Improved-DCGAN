@@ -16,29 +16,41 @@ class Discriminator(gluon.HybridBlock):
         with self.name_scope():
             self.stages = nn.HybridSequential()
 
-            self.stages.add(nn.Conv2D(self.opts.d_h_size, 4, strides=2, padding=1, use_bias=False, **self.init))
+            # input is (nc) x 64 x 64
+            self.stages.add(nn.Conv2D(self.opts.d_h_size, 4, 2, 1, use_bias=False, **self.init))
             if self.opts.with_selu:
                 self.stages.add(nn.SELU())
             else:
                 self.stages.add(nn.LeakyReLU(0.2))
 
-            new_img_size = opts.img_size // 2
-            mult = 1
+            # state size. (self.opts.d_h_size) x 32 x 32
+            self.stages.add(nn.Conv2D(self.opts.d_h_size * 2, 4, 2, 1, use_bias=False, **self.init))
+            if self.opts.with_selu:
+                self.stages.add(nn.SELU())
+            else:
+                self.stages.add(nn.BatchNorm())
+                self.stages.add(nn.LeakyReLU(0.2))
 
-            while new_img_size > 4:
-                self.stages.add(nn.Conv2D(self.opts.g_h_size * (2 * mult), 4, strides=2, padding=1, use_bias=False, **self.init))
-                if self.opts.with_selu:
-                    self.stages.add(nn.SELU())
-                else:
-                    self.stages.add(nn.BatchNorm())
-                    self.stages.add(nn.LeakyReLU(0.2))
+            # state size. (self.opts.d_h_size) x 16 x 16
+            self.stages.add(nn.Conv2D(self.opts.d_h_size * 4, 4, 2, 1, use_bias=False, **self.init))
+            if self.opts.with_selu:
+                self.stages.add(nn.SELU())
+            else:
+                self.stages.add(nn.BatchNorm())
+                self.stages.add(nn.LeakyReLU(0.2))
 
-                new_img_size = new_img_size // 2
-                mult *= 2
+            # state size. (self.opts.d_h_size) x 8 x 8
+            self.stages.add(nn.Conv2D(self.opts.d_h_size * 8, 4, 2, 1, use_bias=False, **self.init))
+            if self.opts.with_selu:
+                self.stages.add(nn.SELU())
+            else:
+                self.stages.add(nn.BatchNorm())
+                self.stages.add(nn.LeakyReLU(0.2))
 
-            # End block
-            self.stages.add(nn.Conv2D(1, 4, strides=1, padding=0, use_bias=False, **self.init))
-            self.stages.add(nn.Activation('sigmoid'))
+            # state size. (self.opts.d_h_size) x 4 x 4
+            self.stages.add(nn.Conv2D(1, 4, 1, 0, use_bias=False, **self.init))
+            # Decreases performances
+            #self.stages.add(nn.Activation('sigmoid'))
 
     def hybrid_forward(self, F, x, *args, **kwargs):
         return self.stages(x).reshape(32, -1)  # .view(-1) in PyTorch => we need to rearrange 1x1x1 to 1

@@ -12,12 +12,12 @@ class Options:
 
         self.data_root = data_root
         self.output_dir = os.path.join(output_dir, 'dc-gan')
-        self.epochs = 200
-        self.batch_size = 32
+        self.epochs = 4000
+        self.batch_size = 512
         self.img_size = image_size
         self.latent_z_size = 100
         self.num_colors = 3
-        self.with_selu = False
+        self.with_selu = True
         self.g_lr = 0.0002
         self.d_lr = 0.00005
         self.g_h_size = 128

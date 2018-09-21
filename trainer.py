@@ -116,7 +116,7 @@ class Trainer:
             logging.info('time: {}'.format(time.time() - tic))
 
             # Visualize one generated image each 10 epoch
-            if (epoch + 1) % 10 == 0:
+            if (epoch + 1) % 1 == 0:
                 fake_img = fake[0]
                 self.visualize(fake_img, epoch + 1)
 

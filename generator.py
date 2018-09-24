@@ -29,6 +29,7 @@ class Generator(gluon.HybridBlock):
             # input is Z, going into a convolution
             self.stages.add(nn.Conv2DTranspose(self.opts.g_h_size * 8, 4, 1, 0, use_bias=False, **self.init))
             if self.opts.with_selu:
+                self.stages.add(nn.BatchNorm())
                 self.stages.add(nn.SELU())
             else:
                 self.stages.add(nn.BatchNorm())
@@ -37,6 +38,7 @@ class Generator(gluon.HybridBlock):
             # state size. (self.opts.g_h_size*8) x 4 x 4
             self.stages.add(nn.Conv2DTranspose(self.opts.g_h_size * 4, 4, 2, 1, use_bias=False, **self.init))
             if self.opts.with_selu:
+                self.stages.add(nn.BatchNorm())
                 self.stages.add(nn.SELU())
             else:
                 self.stages.add(nn.BatchNorm())
@@ -45,6 +47,7 @@ class Generator(gluon.HybridBlock):
             # state size. (self.opts.g_h_size*8) x 8 x 8
             self.stages.add(nn.Conv2DTranspose(self.opts.g_h_size * 2, 4, 2, 1, use_bias=False, **self.init))
             if self.opts.with_selu:
+                self.stages.add(nn.BatchNorm())
                 self.stages.add(nn.SELU())
             else:
                 self.stages.add(nn.BatchNorm())
@@ -53,6 +56,7 @@ class Generator(gluon.HybridBlock):
             # state size. (self.opts.g_h_size*8) x 16 x 16
             self.stages.add(nn.Conv2DTranspose(self.opts.g_h_size, 4, 2, 1, use_bias=False, **self.init))
             if self.opts.with_selu:
+                self.stages.add(nn.BatchNorm())
                 self.stages.add(nn.SELU())
             else:
                 self.stages.add(nn.BatchNorm())

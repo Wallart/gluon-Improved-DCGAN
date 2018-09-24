@@ -30,7 +30,7 @@ def get_dataset_from_folder(opts):
 
 
 if __name__ == '__main__':
-    options = Options(64, '/home/wallart/Datasets/Raw/lfw-deepfunneled', '/home/wallart/Models')
+    options = Options(64, '/home/wallart/datasets/lfw-deepfunneled', '/home/wallart/models')
     train_dataset, _ = get_dataset_from_folder(options)
     trainer = Trainer(options)
     trainer.train(train_dataset)

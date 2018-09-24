@@ -12,17 +12,23 @@ class Options:
 
         self.data_root = data_root
         self.output_dir = os.path.join(output_dir, 'dc-gan')
-        self.epochs = 4000
-        self.batch_size = 512
+        self.epochs = 400
+        # Higher batch size decreases generalisation capabilities
+        self.batch_size = 32
         self.img_size = image_size
         self.latent_z_size = 100
         self.num_colors = 3
         self.with_selu = True
         self.g_lr = 0.0002
         self.d_lr = 0.00005
-        self.g_h_size = 128
-        self.d_h_size = 128
+        self.g_h_size = 64
+        self.d_h_size = 64
         self.beta1 = 0.5
         self.beta2 = 0.999
         self.wd = 0
-        self.visualize = False
+        self.clip_gradient = 10.0
+        self.visualize = True
+        self.hybridize = True
+        self.checkpoint_interval = 25
+        self.graph_to_display = 'generator'
+        self.thumb_interval = 1

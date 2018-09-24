@@ -18,7 +18,7 @@ class Discriminator(gluon.HybridBlock):
 
         with self.name_scope():
             self.stages = nn.HybridSequential()
-            # We have to produce (? x 4 x 4) features maps whatever the original image size was
+            # We have to produce (? x 4 x 4) features maps at layer n-1, whatever the original image size was
             while feature_size > 4:
                 layer = nn.HybridSequential()
                 layer.add(nn.Conv2D(self.opts.d_h_size * mult, 4, 2, 1, use_bias=False, **self.init))

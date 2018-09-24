@@ -28,7 +28,7 @@ class Trainer:
         self.g = Generator(opts)
 
         self.sw = None
-        self.stamp = datetime.now().strftime('%Y_%m_%d-%H_%M')
+        self.stamp = 'DC-GAN-{}'.format(datetime.now().strftime('%Y_%m_%d-%H_%M'))
 
         self.logs_path = os.path.join(self.opts.output_dir, self.stamp, 'logs')
         self.images_path = os.path.join(self.opts.output_dir, self.stamp, 'images')

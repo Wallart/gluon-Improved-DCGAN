@@ -11,7 +11,7 @@ class Options:
             self.ctx = mx.cpu()
 
         self.data_root = data_root
-        self.output_dir = os.path.join(output_dir, 'dc-gan')
+        self.output_dir = os.path.join(output_dir)
         self.epochs = 400
         # Higher batch size decreases generalisation capabilities
         self.batch_size = 32

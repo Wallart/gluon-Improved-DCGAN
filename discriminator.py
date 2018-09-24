@@ -13,45 +13,25 @@ class Discriminator(gluon.HybridBlock):
             'weight_initializer': mx.init.Normal(0.02)
         }
 
+        mult = 1
+        feature_size = self.opts.img_size
+
         with self.name_scope():
             self.stages = nn.HybridSequential()
+            # We have to produce (? x 4 x 4) features maps whatever the original image size was
+            while feature_size > 4:
+                layer = nn.HybridSequential()
+                layer.add(nn.Conv2D(self.opts.d_h_size * mult, 4, 2, 1, use_bias=False, **self.init))
+                if self.opts.with_selu:
+                    layer.add(nn.BatchNorm())
+                    layer.add(nn.SELU())
+                else:
+                    layer.add(nn.LeakyReLU(0.2))
 
-            # input is (nc) x 64 x 64
-            self.stages.add(nn.Conv2D(self.opts.d_h_size, 4, 2, 1, use_bias=False, **self.init))
-            if self.opts.with_selu:
-                self.stages.add(nn.BatchNorm())
-                self.stages.add(nn.SELU())
-            else:
-                self.stages.add(nn.LeakyReLU(0.2))
+                feature_size = feature_size // 2
+                mult *= 2
+                self.stages.add(layer)
 
-            # state size. (self.opts.d_h_size) x 32 x 32
-            self.stages.add(nn.Conv2D(self.opts.d_h_size * 2, 4, 2, 1, use_bias=False, **self.init))
-            if self.opts.with_selu:
-                self.stages.add(nn.BatchNorm())
-                self.stages.add(nn.SELU())
-            else:
-                self.stages.add(nn.BatchNorm())
-                self.stages.add(nn.LeakyReLU(0.2))
-
-            # state size. (self.opts.d_h_size) x 16 x 16
-            self.stages.add(nn.Conv2D(self.opts.d_h_size * 4, 4, 2, 1, use_bias=False, **self.init))
-            if self.opts.with_selu:
-                self.stages.add(nn.BatchNorm())
-                self.stages.add(nn.SELU())
-            else:
-                self.stages.add(nn.BatchNorm())
-                self.stages.add(nn.LeakyReLU(0.2))
-
-            # state size. (self.opts.d_h_size) x 8 x 8
-            self.stages.add(nn.Conv2D(self.opts.d_h_size * 8, 4, 2, 1, use_bias=False, **self.init))
-            if self.opts.with_selu:
-                self.stages.add(nn.BatchNorm())
-                self.stages.add(nn.SELU())
-            else:
-                self.stages.add(nn.BatchNorm())
-                self.stages.add(nn.LeakyReLU(0.2))
-
-            # state size. (self.opts.d_h_size) x 4 x 4
             self.stages.add(nn.Conv2D(1, 4, 1, 0, use_bias=False, **self.init))
             # Decreases performances
             #self.stages.add(nn.Activation('sigmoid'))

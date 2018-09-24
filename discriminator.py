@@ -54,7 +54,7 @@ class Discriminator(gluon.HybridBlock):
             # state size. (self.opts.d_h_size) x 4 x 4
             self.stages.add(nn.Conv2D(1, 4, 1, 0, use_bias=False, **self.init))
             # Decreases performances
-            self.stages.add(nn.Activation('sigmoid'))
+            #self.stages.add(nn.Activation('sigmoid'))
 
     def hybrid_forward(self, F, x, *args, **kwargs):
         return F.reshape(self.stages(x), shape=(32, -1))  # .view(-1) in PyTorch => we need to rearrange 1x1x1 to 1

@@ -32,3 +32,4 @@ class Options:
         self.checkpoint_interval = 25
         self.graph_to_display = 'generator'
         self.thumb_interval = 1
+        self.extra_img_interval = 30

@@ -35,10 +35,10 @@ class Trainer:
 
         logging.basicConfig(level=logging.DEBUG)
 
-    def visualize(self, img_arr, epoch):
+    def visualize(self, tag, img_arr, epoch):
         if self.opts.visualize:
             image = ((img_arr + 1.0) * 127.5).astype(np.uint8)
-            self.sw.add_image(tag='thumb_{}'.format(epoch), image=image, global_step=epoch)
+            self.sw.add_image(tag=tag, image=image, global_step=epoch)
         else:
             plt.imshow(((img_arr.asnumpy().transpose(1, 2, 0) + 1.0) * 127.5).astype(np.uint8))
             plt.axis('off')
@@ -46,7 +46,7 @@ class Trainer:
             if not os.path.isdir(self.images_path):
                 os.makedirs(self.images_path)
 
-            plt.savefig(os.path.join(self.images_path, '{}.png'.format(epoch)))
+            plt.savefig(os.path.join(self.images_path, '{}-{}.png'.format(tag, epoch)))
 
     def train(self, train_data):
 
@@ -75,6 +75,7 @@ class Trainer:
         })
 
         loss = gluon.loss.SigmoidBinaryCrossEntropyLoss()
+        latent_z = nd.random_normal(0, 1, shape=(self.opts.batch_size, self.opts.latent_z_size, 1, 1), ctx=self.opts.ctx)
 
         with SummaryWriter(logdir=self.logs_path, flush_secs=5, verbose=False) as self.sw:
             for epoch in range(self.opts.epochs):
@@ -96,7 +97,6 @@ class Trainer:
                     # (1) Update D network: maximize log(D(x)) + log(1 - D(G(z)))
                     ###########################
                     data = d.as_in_context(self.opts.ctx)
-                    latent_z = nd.random_normal(0, 1, shape=(self.opts.batch_size, self.opts.latent_z_size, 1, 1), ctx=self.opts.ctx)
 
                     with autograd.record():
                         # Train with real image
@@ -153,7 +153,11 @@ class Trainer:
                 # Visualize one generated image each x epoch
                 if (epoch + 1) % self.opts.thumb_interval == 0:
                     fake_img = fake[0]
-                    self.visualize(fake_img, epoch + 1)
+                    self.visualize('Training_thumbnail', fake_img, epoch + 1)
+
+                # Generate batch_size random images each x epochs
+                if (epoch + 1) % self.opts.extra_img_interval == 0:
+                    self.random_extra_images(epoch + 1)
 
                 # Save models each x epochs
                 if (epoch + 1) % self.opts.checkpoint_interval == 0:
@@ -168,6 +172,13 @@ class Trainer:
 
         self.d.collect_params().save(os.path.join(base_path, 'g-{}-epochs.params'.format(epoch)))
         self.g.collect_params().save(os.path.join(base_path, 'd-{}-epochs.params'.format(epoch)))
+
+    def random_extra_images(self, epoch):
+        for i in range(0, self.opts.batch_size):
+            latent_z = nd.random_normal(0, 1, shape=(self.opts.batch_size, self.opts.latent_z_size, 1, 1), ctx=self.opts.ctx)
+            fake = self.g(latent_z)
+            self.visualize('Epoch_{}'.format(epoch), fake[0], epoch)
+
 
     def hybridize(self):
         if self.opts.hybridize:

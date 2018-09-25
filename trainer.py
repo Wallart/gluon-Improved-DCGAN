@@ -9,12 +9,9 @@ from renderer import Renderer
 
 import mxnet as mx
 import numpy as np
-import matplotlib.pyplot as plt
 import time
 import logging
 import os
-
-
 
 def facc(label, pred):
     pred = pred.ravel()
@@ -30,10 +27,14 @@ class Trainer:
         self.g = Generator(opts)
 
         self.sw = None
-        self.stamp = 'DC-GAN-{}'.format(datetime.now().strftime('%Y_%m_%d-%H_%M'))
+        self.stamp = 'DC-GAN-{}e-{}'.format(self.opts.epochs, datetime.now().strftime('%y_%m_%d-%H_%M'))
 
-        self.logs_path = os.path.join(self.opts.output_dir, self.stamp, 'logs')
-        self.images_path = os.path.join(self.opts.output_dir, self.stamp, 'images')
+        output_dir = os.path.expanduser(self.opts.output_dir)
+        output_dir = output_dir if os.path.abspath(output_dir) else os.path.join(os.getcwd(), self.opts.output_dir)
+
+        self.logs_path = os.path.join(output_dir, self.stamp, 'logs')
+        self.images_path = os.path.join(output_dir, self.stamp, 'images')
+        self.models_path = os.path.join(output_dir, self.stamp, 'models')
 
         logging.basicConfig(level=logging.DEBUG)
 
@@ -49,15 +50,15 @@ class Trainer:
         g_trainer = gluon.Trainer(self.g.collect_params(), 'Adam', {
             'learning_rate': self.opts.g_lr,
             'wd': self.opts.wd,
-            'beta1': 0.5,
-            'beta2': 0.999,
+            'beta1': self.opts.beta1,
+            'beta2': self.opts.beta2,
             'clip_gradient': self.opts.clip_gradient
         })
         d_trainer = gluon.Trainer(self.d.collect_params(), 'Adam', {
             'learning_rate': self.opts.d_lr,
             'wd': self.opts.wd,
-            'beta1': 0.5,
-            'beta2': 0.999,
+            'beta1': self.opts.beta1,
+            'beta2': self.opts.beta2,
             'clip_gradient': self.opts.clip_gradient
         })
 
@@ -152,13 +153,11 @@ class Trainer:
             self.save_models(self.opts.epochs)
 
     def save_models(self, epoch):
-        base_path = os.path.join(self.opts.output_dir, self.stamp, 'models')
+        if not os.path.isdir(self.models_path):
+            os.makedirs(self.models_path)
 
-        if not os.path.isdir(base_path):
-            os.makedirs(base_path)
-
-        self.d.collect_params().save(os.path.join(base_path, 'd-{}-epochs.params'.format(epoch)))
-        self.g.collect_params().save(os.path.join(base_path, 'g-{}-epochs.params'.format(epoch)))
+        self.d.save_parameters(os.path.join(self.models_path, 'd-{}-epochs.params'.format(epoch)))
+        self.g.save_parameters(os.path.join(self.models_path, 'g-{}-epochs.params'.format(epoch)))
 
     def generate_thumb(self, tag, img_arr, epoch):
         if self.opts.visualize:
@@ -176,12 +175,14 @@ class Trainer:
 
     def initialize(self):
         if self.opts.g_model:
-            self.g.load_params(self.opts.g_model, ctx=self.opts.ctx)
+            g_model = os.path.expanduser(self.opts.g_model)
+            self.g.load_parameters(g_model, ctx=self.opts.ctx)
         else:
             self.g.initialize(ctx=self.opts.ctx)
 
         if self.opts.d_model:
-            self.d.load_params(self.opts.d_model, ctx=self.opts.ctx)
+            d_model = os.path.expanduser(self.opts.d_model)
+            self.d.load_parameters(d_model, ctx=self.opts.ctx)
         else:
             self.d.initialize(ctx=self.opts.ctx)
 

@@ -3,6 +3,7 @@ from mxnet import nd
 from generator import Generator
 from renderer import Renderer
 from trainer import Trainer
+from tqdm import tqdm
 
 import mxnet as mx
 import numpy as np
@@ -34,25 +35,27 @@ def get_dataset_from_folder(opts):
 
 def render(opts):
     model = os.path.expanduser(opts.generator)
+    output_dir = os.path.expanduser(opts.out_dir)
+    output_dir = output_dir if os.path.abspath(output_dir) else os.path.join(os.getcwd(), opts.out_dir)
     gen = Generator(opts)
-    gen.collect_params().load(model, ctx=opts.ctx)
+    gen.load_parameters(model, ctx=opts.ctx)
 
-    for _ in range(0, opts.n_images):
+    for _ in tqdm(range(0, opts.n_images)):
         img_name = str(random.getrandbits(128))
         latent_z = nd.random_normal(0, 1, shape=(1, opts.latent_z_size, 1, 1), ctx=opts.ctx)
         fake = gen(latent_z)
-        Renderer.render(fake[0], img_name, opts.out_dir)
+        Renderer.render(fake[0], img_name, output_dir)
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(description='Deep Convolutional Generative Adversarial Networks')
+    parser = argparse.ArgumentParser(description='Improved Deep Convolutional Generative Adversarial Networks')
     sub_parsers = parser.add_subparsers(dest='action')
 
     train_parser = sub_parsers.add_parser('train')
     train_parser.add_argument('dataset', type=str, help='path of the train dataset')
     train_parser.add_argument('image_size', type=int, help='size of the dataset images')
     train_parser.add_argument('-b', '--batch', dest='batch_size', type=int, default=32, help='batch size')
-    train_parser.add_argument('-b1', '--beta1', dest='b1', type=float, default=0.5, help='batch1 value')
-    train_parser.add_argument('-b2', '--beta2', dest='b2', type=float, default=0.999, help='batch2 value')
+    train_parser.add_argument('-b1', '--beta1', dest='beta1', type=float, default=0.5, help='batch1 value')
+    train_parser.add_argument('-b2', '--beta2', dest='beta2', type=float, default=0.999, help='batch2 value')
     train_parser.add_argument('-e', '--epochs', dest='epochs', type=int, default=1000, help='learning epochs')
     train_parser.add_argument('-m', '--model', dest='output_dir', type=str, default=os.getcwd(), help='model output directory')
     train_parser.add_argument('-z', '--z-size', dest='latent_z_size', type=int, default=100, help='latent_z size')

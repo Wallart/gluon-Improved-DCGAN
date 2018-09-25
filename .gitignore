@@ -4,3 +4,4 @@ venv
 *.zip
 log.txt
 cats_bigger_than*
+nohup.out

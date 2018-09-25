@@ -5,6 +5,7 @@ from mxboard import SummaryWriter
 from datetime import datetime
 from discriminator import Discriminator
 from generator import Generator
+from renderer import Renderer
 
 import mxnet as mx
 import numpy as np
@@ -12,6 +13,7 @@ import matplotlib.pyplot as plt
 import time
 import logging
 import os
+
 
 
 def facc(label, pred):
@@ -35,29 +37,14 @@ class Trainer:
 
         logging.basicConfig(level=logging.DEBUG)
 
-    def visualize(self, tag, img_arr, epoch):
-        if self.opts.visualize:
-            image = ((img_arr + 1.0) * 127.5).astype(np.uint8)
-            self.sw.add_image(tag=tag, image=image, global_step=epoch)
-        else:
-            plt.imshow(((img_arr.asnumpy().transpose(1, 2, 0) + 1.0) * 127.5).astype(np.uint8))
-            plt.axis('off')
-
-            if not os.path.isdir(self.images_path):
-                os.makedirs(self.images_path)
-
-            plt.savefig(os.path.join(self.images_path, '{}-{}.png'.format(tag, epoch)))
-
     def train(self, train_data):
-
         real_label = nd.ones((self.opts.batch_size,), ctx=self.opts.ctx)
         fake_label = nd.zeros((self.opts.batch_size,), ctx=self.opts.ctx)
 
         metric = mx.metric.CustomMetric(facc)
 
         self.hybridize()
-        self.g.initialize(ctx=self.opts.ctx)
-        self.d.initialize(ctx=self.opts.ctx)
+        self.initialize()
 
         g_trainer = gluon.Trainer(self.g.collect_params(), 'Adam', {
             'learning_rate': self.opts.g_lr,
@@ -86,10 +73,10 @@ class Trainer:
                 d_loss_scalar = 0
                 g_loss_scalar = 0
 
-                if self.opts.hybridize and epoch == 1:
-                    if self.opts.graph_to_display == 'generator':
+                if not self.opts.no_hybridize and epoch == 1:
+                    if self.opts.graph == 'generator':
                         self.sw.add_graph(self.g)
-                    elif self.opts.graph_to_display == 'discriminator':
+                    elif self.opts.graph == 'discriminator':
                         self.sw.add_graph(self.d)
 
                 for i, (d, l) in enumerate(train_data):
@@ -153,11 +140,11 @@ class Trainer:
                 # Visualize one generated image each x epoch
                 if (epoch + 1) % self.opts.thumb_interval == 0:
                     fake_img = fake[0]
-                    self.visualize('Training_thumbnail', fake_img, epoch + 1)
+                    self.generate_thumb('Training_thumbnail', fake_img, epoch + 1)
 
                 # Generate batch_size random images each x epochs
                 if (epoch + 1) % self.opts.extra_img_interval == 0:
-                    self.random_extra_images(epoch + 1)
+                    self.extra_thumb(epoch + 1)
 
                 # Save models each x epochs
                 if (epoch + 1) % self.opts.checkpoint_interval == 0:
@@ -170,17 +157,35 @@ class Trainer:
         if not os.path.isdir(base_path):
             os.makedirs(base_path)
 
-        self.d.collect_params().save(os.path.join(base_path, 'g-{}-epochs.params'.format(epoch)))
-        self.g.collect_params().save(os.path.join(base_path, 'd-{}-epochs.params'.format(epoch)))
+        self.d.collect_params().save(os.path.join(base_path, 'd-{}-epochs.params'.format(epoch)))
+        self.g.collect_params().save(os.path.join(base_path, 'g-{}-epochs.params'.format(epoch)))
 
-    def random_extra_images(self, epoch):
+    def generate_thumb(self, tag, img_arr, epoch):
+        if self.opts.visualize:
+            image = ((img_arr + 1.0) * 127.5).astype(np.uint8)
+            self.sw.add_image(tag=tag, image=image, global_step=epoch)
+        else:
+            img_name = '{}-{}.png'.format(tag, epoch)
+            Renderer.render(img_arr, img_name, self.images_path)
+
+    def extra_thumb(self, epoch):
         for i in range(0, self.opts.batch_size):
             latent_z = nd.random_normal(0, 1, shape=(self.opts.batch_size, self.opts.latent_z_size, 1, 1), ctx=self.opts.ctx)
             fake = self.g(latent_z)
-            self.visualize('Epoch_{}'.format(epoch), fake[0], epoch)
+            self.generate_thumb('Epoch_{}'.format(epoch), fake[0], epoch)
 
+    def initialize(self):
+        if self.opts.g_model:
+            self.g.load_params(self.opts.g_model, ctx=self.opts.ctx)
+        else:
+            self.g.initialize(ctx=self.opts.ctx)
+
+        if self.opts.d_model:
+            self.d.load_params(self.opts.d_model, ctx=self.opts.ctx)
+        else:
+            self.d.initialize(ctx=self.opts.ctx)
 
     def hybridize(self):
-        if self.opts.hybridize:
+        if not self.opts.no_hybridize:
             self.g.hybridize()
             self.d.hybridize()

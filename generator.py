@@ -22,7 +22,7 @@ class Generator(gluon.HybridBlock):
         }
 
         i = 0
-        mult = self.opts.img_size // 8
+        mult = self.opts.image_size // 8
 
         with self.name_scope():
             self.stages = nn.HybridSequential()
@@ -31,20 +31,20 @@ class Generator(gluon.HybridBlock):
                 strides = 1 if i == 0 else 2
                 padding = 0 if i == 0 else 1
 
-                layer = nn.HybridSequential()
+                layer = nn.HybridSequential(prefix='')
                 layer.add(nn.Conv2DTranspose(self.opts.g_h_size * mult, 4, strides, padding, use_bias=False, **self.init))
-                if self.opts.with_selu:
-                    layer.add(nn.BatchNorm())
-                    layer.add(nn.SELU())
-                else:
+                if self.opts.relu:
                     layer.add(nn.BatchNorm())
                     layer.add(nn.Activation('relu'))
+                else:
+                    layer.add(nn.BatchNorm())
+                    layer.add(nn.SELU())
 
                 i += 1
                 mult //= 2
                 self.stages.add(layer)
 
-            layer = nn.HybridSequential()
+            layer = nn.HybridSequential(prefix='')
             layer.add(nn.Conv2DTranspose(self.opts.num_colors, 4, 2, 1, use_bias=False, **self.init))
             layer.add(nn.Activation('tanh'))
             self.stages.add(layer)

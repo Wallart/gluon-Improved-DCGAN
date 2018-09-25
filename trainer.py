@@ -141,10 +141,10 @@ class Trainer:
                 # Visualize one generated image each x epoch
                 if (epoch + 1) % self.opts.thumb_interval == 0:
                     fake_img = fake[0]
-                    self.generate_thumb('Training_thumbnail', fake_img, epoch + 1)
+                    self.generate_thumb('epoch_thumbnail', fake_img, epoch + 1)
 
                 # Generate batch_size random images each x epochs
-                if (epoch + 1) % self.opts.extra_img_interval == 0:
+                if (epoch + 1) % self.opts.extra_interval == 0:
                     self.extra_thumb(epoch + 1)
 
                 # Save models each x epochs
@@ -160,7 +160,7 @@ class Trainer:
         self.g.save_parameters(os.path.join(self.models_path, 'g-{}-epochs.params'.format(epoch)))
 
     def generate_thumb(self, tag, img_arr, epoch):
-        if self.opts.visualize:
+        if not self.opts.no_visualize:
             image = ((img_arr + 1.0) * 127.5).astype(np.uint8)
             self.sw.add_image(tag=tag, image=image, global_step=epoch)
         else:

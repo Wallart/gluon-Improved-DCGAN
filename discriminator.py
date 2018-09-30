@@ -37,4 +37,5 @@ class Discriminator(gluon.HybridBlock):
             #self.stages.add(nn.Activation('sigmoid'))
 
     def hybrid_forward(self, F, x, *args, **kwargs):
-        return F.reshape(self.stages(x), shape=(32, -1))  # .view(-1) in PyTorch => we need to rearrange 1x1x1 to 1
+        x = self.stages(x)
+        return F.reshape(x, shape=(x.shape[0], -1))  # .view(-1) in PyTorch => we need to rearrange 1x1x1 to 1

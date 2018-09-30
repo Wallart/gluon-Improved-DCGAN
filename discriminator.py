@@ -38,4 +38,4 @@ class Discriminator(gluon.HybridBlock):
 
     def hybrid_forward(self, F, x, *args, **kwargs):
         x = self.stages(x)
-        return F.reshape(x, shape=(x.shape[0], -1))  # .view(-1) in PyTorch => we need to rearrange 1x1x1 to 1
+        return F.reshape(x, shape=-1)  # .view(-1) in PyTorch => we need to rearrange 1x1x1 to 1

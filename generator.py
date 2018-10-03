@@ -33,11 +33,10 @@ class Generator(gluon.HybridBlock):
 
                 layer = nn.HybridSequential(prefix='')
                 layer.add(nn.Conv2DTranspose(self.opts.ngf * mult, 4, strides, padding, use_bias=False, **self.init))
+                layer.add(nn.BatchNorm())
                 if self.opts.relu:
-                    layer.add(nn.BatchNorm())
                     layer.add(nn.Activation('relu'))
                 else:
-                    layer.add(nn.BatchNorm())
                     layer.add(nn.SELU())
 
                 i += 1

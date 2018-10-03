@@ -13,6 +13,7 @@ class Discriminator(gluon.HybridBlock):
             'weight_initializer': mx.init.Normal(0.02)
         }
 
+        i = 0
         mult = 1
         feature_size = self.opts.image_size
 
@@ -22,24 +23,26 @@ class Discriminator(gluon.HybridBlock):
             while feature_size > 4:
                 layer = nn.HybridSequential()
                 layer.add(nn.Conv2D(self.opts.ndf * mult, 4, 2, 1, use_bias=False, **self.init))
+                if i > 0:
+                    layer.add(nn.BatchNorm())
                 if self.opts.relu:
                     layer.add(nn.LeakyReLU(0.2))
                 else:
-                    layer.add(nn.BatchNorm())
                     layer.add(nn.SELU())
 
                 feature_size = feature_size // 2
+                i += 1
                 mult *= 2
                 self.stages.add(layer)
 
             layer = nn.HybridSequential(prefix='')
             layer.add(nn.Conv2D(1, 4, 1, 0, use_bias=False, **self.init))
-            #layer.add(nn.Activation('sigmoid'))
+            layer.add(nn.Activation('sigmoid'))
             self.stages.add(layer)
 
             if self.opts.relu:
                 assert self.stages[0][-2]._channels == self.opts.ndf
-                assert self.stages[-2][-2]._channels == self.opts.image_size * 8
+                assert self.stages[-2][-3]._channels == self.opts.image_size * 8
             else:
                 assert self.stages[0][-3]._channels == self.opts.ndf
                 assert self.stages[-2][-3]._channels == self.opts.image_size * 8

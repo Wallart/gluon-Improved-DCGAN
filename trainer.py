@@ -48,7 +48,7 @@ class Trainer:
         self.images_path = os.path.join(path, 'images')
         self.models_path = os.path.join(path, 'models')
 
-        logging.basicConfig(level=logging.DEBUG)
+        logging.basicConfig(format='%(message)s', level=logging.DEBUG)
 
     def train(self, train_data):
         real_label = nd.ones((self.opts.batch_size,), ctx=self.opts.ctx)
@@ -78,9 +78,8 @@ class Trainer:
 
         with SummaryWriter(logdir=self.logs_path, flush_secs=5, verbose=False) as self.sw:
             for epoch in range(self.opts.epochs):
+                e_tic = time.time()
                 fake = None
-                tic = time.time()
-                btic = time.time()
 
                 d_loss_scalar = 0
                 g_loss_scalar = 0
@@ -92,6 +91,8 @@ class Trainer:
                         self.sw.add_graph(self.d)
 
                 for i, (d, l) in enumerate(train_data):
+                    b_tic = time.time()
+
                     ############################
                     # (1) Update D network: maximize log(D(x)) + log(1 - D(G(z)))
                     ###########################
@@ -131,12 +132,11 @@ class Trainer:
                     # Print log info every 10 batches
                     if i % 10 == 0:
                         name, acc = metric.get()
-                        logging.info('speed: {} samples/s'.format(self.opts.batch_size / (time.time() - btic)))
-                        logging.info(
-                            'discriminator loss = %f, generator loss = %f, binary training acc = %f at iter %d epoch %d'
-                            % (d_loss_scalar, g_loss_scalar, acc, i, epoch))
-
-                    btic = time.time()
+                        batch_time = time.time() - b_tic
+                        logging.info('[Epoch {}][Iter {}]'.format(epoch + 1, i, ))
+                        logging.info('\tD_loss = {:.6f}, G_loss = {:.6f}, Acc = {:.6f}'.format(d_loss_scalar, g_loss_scalar, acc))
+                        logging.info('\tTime: {:.2f} second(s)'.format(batch_time))
+                        logging.info('\tSpeed: {:.2f} samples/s'.format(self.opts.batch_size / batch_time))
 
                 name, acc = metric.get()
                 metric.reset()
@@ -146,8 +146,7 @@ class Trainer:
                 self.sw.add_scalar(tag='discriminator_loss', value=d_loss_scalar, global_step=epoch)
                 self.sw.add_scalar(tag='accuracy', value=acc, global_step=epoch)
 
-                logging.info('\nbinary training acc at epoch {}: {}={}'.format(epoch, name, acc))
-                logging.info('time: {}'.format(time.time() - tic))
+                logging.info('\n[Epoch {}] Acc = {:.6f} Time: {:.2f}\n'.format(epoch + 1, acc, time.time() - e_tic))
 
                 # Visualize one generated image each x epoch
                 if (epoch + 1) % self.opts.thumb_interval == 0:

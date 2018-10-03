@@ -3,6 +3,19 @@ from mxnet.gluon import nn
 
 import mxnet as mx
 
+# Nb layers determined by image size
+N_LAYERS = {
+    4: 1,
+    8: 2,
+    16: 3,
+    32: 4,
+    64: 5,
+    128: 6,
+    256: 7,
+    512: 8,
+    1024: 9
+}
+
 
 class Discriminator(gluon.HybridBlock):
 
@@ -15,12 +28,12 @@ class Discriminator(gluon.HybridBlock):
 
         i = 0
         mult = 1
-        feature_size = self.opts.image_size
+        feature_map_size = self.opts.image_size
 
         with self.name_scope():
             self.stages = nn.HybridSequential()
             # We have to produce (? x 4 x 4) features maps at layer n-1, whatever the original image size was
-            while feature_size > 4:
+            while feature_map_size > 4:
                 layer = nn.HybridSequential()
                 layer.add(nn.Conv2D(self.opts.ndf * mult, 4, 2, 1, use_bias=False, **self.init))
                 if i > 0:
@@ -30,7 +43,7 @@ class Discriminator(gluon.HybridBlock):
                 else:
                     layer.add(nn.SELU())
 
-                feature_size = feature_size // 2
+                feature_map_size = feature_map_size // 2
                 i += 1
                 mult *= 2
                 self.stages.add(layer)
@@ -40,12 +53,9 @@ class Discriminator(gluon.HybridBlock):
             layer.add(nn.Activation('sigmoid'))
             self.stages.add(layer)
 
-            if self.opts.relu:
-                assert self.stages[0][-2]._channels == self.opts.ndf
-                assert self.stages[-2][-3]._channels == self.opts.image_size * 8
-            else:
-                assert self.stages[0][-3]._channels == self.opts.ndf
-                assert self.stages[-2][-3]._channels == self.opts.image_size * 8
+            assert len(self.stages) == N_LAYERS[self.opts.image_size]
+            assert self.stages[0][-2]._channels == self.opts.ndf
+            assert self.stages[-2][-3]._channels == self.opts.ndf * self.opts.image_size // 8
 
     def hybrid_forward(self, F, x, *args, **kwargs):
         x = self.stages(x)

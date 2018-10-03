@@ -3,6 +3,19 @@ from mxnet.gluon import nn
 
 import mxnet as mx
 
+# Nb layers determined by image size
+N_LAYERS = {
+    4: 1,
+    8: 2,
+    16: 3,
+    32: 4,
+    64: 5,
+    128: 6,
+    256: 7,
+    512: 8,
+    1024: 9
+}
+
 
 class Generator(gluon.HybridBlock):
 
@@ -48,7 +61,8 @@ class Generator(gluon.HybridBlock):
             layer.add(nn.Activation('tanh'))
             self.stages.add(layer)
 
-            assert self.stages[0][-3]._channels == self.opts.image_size * 8
+            assert len(self.stages) == N_LAYERS[self.opts.image_size]
+            assert self.stages[0][-3]._channels == self.opts.ngf * self.opts.image_size // 8
             assert self.stages[-2][-3]._channels == self.opts.ngf
 
     def hybrid_forward(self, F, x, *args, **kwargs):

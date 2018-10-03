@@ -26,13 +26,13 @@ class Generator(gluon.HybridBlock):
 
         with self.name_scope():
             self.stages = nn.HybridSequential()
-            # We have to produce (? x img_size / 2 x img_size / 2) features maps at layer n-1, whatever the original image size was
+            # We have to produce (num_color x img_size x img_size) features maps on the last layer
             while mult > 0:
                 strides = 1 if i == 0 else 2
                 padding = 0 if i == 0 else 1
 
                 layer = nn.HybridSequential(prefix='')
-                layer.add(nn.Conv2DTranspose(self.opts.g_h_size * mult, 4, strides, padding, use_bias=False, **self.init))
+                layer.add(nn.Conv2DTranspose(self.opts.ngf * mult, 4, strides, padding, use_bias=False, **self.init))
                 if self.opts.relu:
                     layer.add(nn.BatchNorm())
                     layer.add(nn.Activation('relu'))
@@ -48,6 +48,9 @@ class Generator(gluon.HybridBlock):
             layer.add(nn.Conv2DTranspose(self.opts.num_colors, 4, 2, 1, use_bias=False, **self.init))
             layer.add(nn.Activation('tanh'))
             self.stages.add(layer)
+
+            assert self.stages[0][-3]._channels == self.opts.image_size * 8
+            assert self.stages[-2][-3]._channels == self.opts.ngf
 
     def hybrid_forward(self, F, x, *args, **kwargs):
         return self.stages(x)

@@ -21,7 +21,7 @@ class Discriminator(gluon.HybridBlock):
             # We have to produce (? x 4 x 4) features maps at layer n-1, whatever the original image size was
             while feature_size > 4:
                 layer = nn.HybridSequential()
-                layer.add(nn.Conv2D(self.opts.d_h_size * mult, 4, 2, 1, use_bias=False, **self.init))
+                layer.add(nn.Conv2D(self.opts.ndf * mult, 4, 2, 1, use_bias=False, **self.init))
                 if self.opts.relu:
                     layer.add(nn.LeakyReLU(0.2))
                 else:
@@ -32,9 +32,17 @@ class Discriminator(gluon.HybridBlock):
                 mult *= 2
                 self.stages.add(layer)
 
-            self.stages.add(nn.Conv2D(1, 4, 1, 0, use_bias=False, **self.init))
-            # Decreases performances
-            #self.stages.add(nn.Activation('sigmoid'))
+            layer = nn.HybridSequential(prefix='')
+            layer.add(nn.Conv2D(1, 4, 1, 0, use_bias=False, **self.init))
+            #layer.add(nn.Activation('sigmoid'))
+            self.stages.add(layer)
+
+            if self.opts.relu:
+                assert self.stages[0][-2]._channels == self.opts.ndf
+                assert self.stages[-2][-2]._channels == self.opts.image_size * 8
+            else:
+                assert self.stages[0][-3]._channels == self.opts.ndf
+                assert self.stages[-2][-3]._channels == self.opts.image_size * 8
 
     def hybrid_forward(self, F, x, *args, **kwargs):
         x = self.stages(x)

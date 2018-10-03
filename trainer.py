@@ -10,6 +10,7 @@ from renderer import Renderer
 import mxnet as mx
 import numpy as np
 import time
+import shutil
 import logging
 import os
 
@@ -28,13 +29,22 @@ class Trainer:
 
         self.sw = None
         self.stamp = 'DC-GAN-{}e-{}'.format(self.opts.epochs, datetime.now().strftime('%y_%m_%d-%H_%M'))
+        if self.opts.model_name:
+            self.stamp = self.opts.model_name
 
         output_dir = os.path.expanduser(self.opts.output_dir)
         output_dir = output_dir if os.path.abspath(output_dir) else os.path.join(os.getcwd(), self.opts.output_dir)
 
-        self.logs_path = os.path.join(output_dir, self.stamp, 'logs')
-        self.images_path = os.path.join(output_dir, self.stamp, 'images')
-        self.models_path = os.path.join(output_dir, self.stamp, 'models')
+        path = os.path.join(output_dir, self.stamp)
+        if os.path.isdir(path) and self.opts.overwrite:
+            shutil.rmtree(path)
+            os.makedirs(path)
+        elif os.path.isdir(path):
+            raise Exception('Output directory already exists.')
+
+        self.logs_path = os.path.join(path, 'logs')
+        self.images_path = os.path.join(path, 'images')
+        self.models_path = os.path.join(path, 'models')
 
         logging.basicConfig(level=logging.DEBUG)
 
@@ -178,13 +188,13 @@ class Trainer:
             g_model = os.path.expanduser(self.opts.g_model)
             self.g.load_parameters(g_model, ctx=self.opts.ctx)
         else:
-            self.g.initialize(ctx=self.opts.ctx)
+            self.g.initialize(mx.init.Normal(0.02), ctx=self.opts.ctx)
 
         if self.opts.d_model:
             d_model = os.path.expanduser(self.opts.d_model)
             self.d.load_parameters(d_model, ctx=self.opts.ctx)
         else:
-            self.d.initialize(ctx=self.opts.ctx)
+            self.d.initialize(mx.init.Normal(0.02), ctx=self.opts.ctx)
 
     def hybridize(self):
         if not self.opts.no_hybridize:

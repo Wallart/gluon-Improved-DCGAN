@@ -57,7 +57,8 @@ if __name__ == '__main__':
     train_parser.add_argument('-b1', '--beta1', dest='beta1', type=float, default=0.5, help='batch1 value')
     train_parser.add_argument('-b2', '--beta2', dest='beta2', type=float, default=0.999, help='batch2 value')
     train_parser.add_argument('-e', '--epochs', dest='epochs', type=int, default=1000, help='learning epochs')
-    train_parser.add_argument('-m', '--model', dest='output_dir', type=str, default=os.getcwd(), help='model output directory')
+    train_parser.add_argument('-n', '--name', dest='model_name', type=str, help='model name')
+    train_parser.add_argument('-o', '--output', dest='output_dir', type=str, default=os.getcwd(), help='model output directory')
     train_parser.add_argument('-z', '--z-size', dest='latent_z_size', type=int, default=100, help='latent_z size')
     train_parser.add_argument('-c', '--colors', dest='num_colors', type=int, default=3, help='number of colors for generated images')
     train_parser.add_argument('-r', '--relu', dest='relu', action='store_true', help='use old relu layers instead of selu')
@@ -74,6 +75,7 @@ if __name__ == '__main__':
     train_parser.add_argument('--no-gpu', dest='no_gpu', action='store_true', help='disable gpu usage')
     train_parser.add_argument('--ndf', type=int, default=128, help='size of feature maps to handle in discriminator')
     train_parser.add_argument('--ngf', type=int, default=128, help='size of feature maps to produce in generator, whatever images size is')
+    train_parser.add_argument('--overwrite', action='store_true', help='overwrite model if output directory already exists')
     train_parser.add_argument('--thumb-interval', dest='thumb_interval', type=int, default=1, help='thumbnail interval generation (epochs)')
     train_parser.add_argument('--weight-decay', dest='wd', type=int, default=0, help='weight decay')
 

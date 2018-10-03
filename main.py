@@ -72,7 +72,7 @@ if __name__ == '__main__':
     train_parser.add_argument('--g-lr', dest='g_lr', type=float, default=0.0002, help='generator learning rate')
     train_parser.add_argument('--g-model', dest='g_model', type=str, help='generator model')
     train_parser.add_argument('--graph', dest='graph', type=str, choices=['discriminator', 'generator'], default='generator', help='network to render in mxboard')
-    train_parser.add_argument('--no-gpu', dest='no_gpu', action='store_true', help='disable gpu usage')
+    train_parser.add_argument('--gpus', dest='gpus', type=str, default='', help='gpus id to use, fot example 0,1')
     train_parser.add_argument('--ndf', type=int, default=128, help='size of feature maps to handle in discriminator')
     train_parser.add_argument('--ngf', type=int, default=128, help='size of feature maps to produce in generator, whatever images size is')
     train_parser.add_argument('--overwrite', action='store_true', help='overwrite model if output directory already exists')
@@ -92,10 +92,11 @@ if __name__ == '__main__':
 
     args = parser.parse_args()
     try:
-        args.ctx = mx.gpu() if not args.no_gpu else mx.cpu()
+        args.ctx = [mx.gpu(int(i)) for i in args.gpus.split(',') if i.strip()]
+        args.ctx = args.ctx if args.ctx else [mx.cpu()]
     except:
         logging.error('Cannot access GPU, fallback to CPU')
-        args.ctx = mx.cpu()
+        args.ctx = [mx.cpu()]
 
     if args.action == 'train':
         train_dataset, _ = get_dataset_from_folder(args)

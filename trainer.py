@@ -28,6 +28,7 @@ class Trainer:
         self.g = Generator(opts)
         # from_sigmoid is required, or we have to remove the sigmoid activation layer in the discriminator network
         self.loss = gluon.loss.SigmoidBinaryCrossEntropyLoss(from_sigmoid=True)
+        self.metric = mx.metric.CustomMetric(facc)
 
         self.sw = None
         self.stamp = 'DC-GAN-{}e-{}'.format(self.opts.epochs, datetime.now().strftime('%y_%m_%d-%H_%M'))
@@ -51,11 +52,6 @@ class Trainer:
         logging.basicConfig(format='%(message)s', level=logging.DEBUG)
 
     def train(self, train_data):
-        real_label = nd.ones((self.opts.batch_size,), ctx=self.opts.ctx)
-        fake_label = nd.zeros((self.opts.batch_size,), ctx=self.opts.ctx)
-
-        metric = mx.metric.CustomMetric(facc)
-
         self.hybridize()
         self.initialize()
 
@@ -74,12 +70,14 @@ class Trainer:
             'clip_gradient': self.opts.clip_gradient
         })
 
-        latent_z = nd.random_normal(0, 1, shape=(self.opts.batch_size, self.opts.latent_z_size, 1, 1), ctx=self.opts.ctx)
+        latent_z = nd.random_normal(0, 1, shape=(self.opts.batch_size, self.opts.latent_z_size, 1, 1))
+        latent_z = gluon.utils.split_and_load(latent_z, ctx_list=self.opts.ctx, batch_axis=0)
+        real_label = gluon.utils.split_and_load(nd.ones((self.opts.batch_size,)), ctx_list=self.opts.ctx, batch_axis=0)
+        fake_label = gluon.utils.split_and_load(nd.zeros((self.opts.batch_size,)), ctx_list=self.opts.ctx, batch_axis=0)
 
         with SummaryWriter(logdir=self.logs_path, flush_secs=5, verbose=False) as self.sw:
             for epoch in range(self.opts.epochs):
                 e_tic = time.time()
-                fake = None
 
                 d_loss_scalar = 0
                 g_loss_scalar = 0
@@ -96,21 +94,23 @@ class Trainer:
                     ############################
                     # (1) Update D network: maximize log(D(x)) + log(1 - D(G(z)))
                     ###########################
-                    data = d.as_in_context(self.opts.ctx)
+                    data = gluon.utils.split_and_load(d, ctx_list=self.opts.ctx, batch_axis=0)
+                    # label = gluon.utils.split_and_load(l, ctx_list=self.opts.ctx, batch_axis=0)
+                    nd.waitall()
 
                     with autograd.record():
-                        # Train with real image
-                        output = self.d(data).reshape((-1, 1))
-                        err_d_real = self.loss(output, real_label)
-                        metric.update([real_label, ], [output, ])
+                        # Train with real image then fake image
+                        r_output = [self.d(x) for x in data]
+                        loss_d_real = [self.loss(x, y) for x, y in zip(r_output, real_label)]
+                        self.metric.update(real_label, r_output)
 
-                        # Train with fake image
-                        fake = self.g(latent_z)
-                        output = self.d(fake.detach()).reshape((-1, 1))
-                        err_d_fake = self.loss(output, fake_label)
-                        err_d = err_d_real + err_d_fake
-                        err_d.backward()
-                        metric.update([fake_label, ], [output, ])
+                        f_output = [self.d(self.g(z).detach()) for z in latent_z]
+                        loss_d_fake = [self.loss(x, y) for x, y in zip(f_output, fake_label)]
+                        self.metric.update(fake_label, f_output)
+
+                        loss_d = [r + f for r, f in zip(loss_d_real, loss_d_fake)]
+                        for loss in loss_d:
+                            loss.backward()
 
                     d_trainer.step(self.opts.batch_size)
 
@@ -119,27 +119,32 @@ class Trainer:
                     ###########################
 
                     with autograd.record():
-                        fake = self.g(latent_z)
-                        output = self.d(fake).reshape((-1, 1))
-                        err_g = self.loss(output, real_label)
-                        err_g.backward()
+                        fakes = [self.g(z) for z in latent_z]
+                        loss_g = [self.loss(self.d(f), y) for f, y in zip(fakes, real_label)]
+                        for loss in loss_g:
+                            loss.backward()
 
                     g_trainer.step(self.opts.batch_size)
 
-                    d_loss_scalar = nd.mean(err_d).asscalar()
-                    g_loss_scalar = nd.mean(err_g).asscalar()
+                    loss_d_scalar = sum([e.mean().asscalar() for e in loss_d]) / len(loss_d)
+                    loss_g_scalar = sum([e.mean().asscalar() for e in loss_g]) / len(loss_g)
+
+                    # Visualize one generated image each x epoch
+                    if (epoch + 1) % self.opts.thumb_interval == 0:
+                        for fake in fakes:
+                            self.generate_thumb('epoch_thumbnail', fake[0], epoch + 1)
 
                     # Print log info every 10 batches
                     if i % 10 == 0:
-                        name, acc = metric.get()
+                        name, acc = self.metric.get()
                         batch_time = time.time() - b_tic
                         logging.info('[Epoch {}][Iter {}]'.format(epoch + 1, i, ))
-                        logging.info('\tD_loss = {:.6f}, G_loss = {:.6f}, Acc = {:.6f}'.format(d_loss_scalar, g_loss_scalar, acc))
+                        logging.info('\tD_loss = {:.6f}, G_loss = {:.6f}, Acc = {:.6f}'.format(loss_d_scalar, loss_g_scalar, acc))
                         logging.info('\tTime: {:.2f} second(s)'.format(batch_time))
                         logging.info('\tSpeed: {:.2f} samples/s'.format(self.opts.batch_size / batch_time))
 
-                name, acc = metric.get()
-                metric.reset()
+                name, acc = self.metric.get()
+                self.metric.reset()
 
                 # Log to tensorboard
                 self.sw.add_scalar(tag='generator_loss', value=g_loss_scalar, global_step=epoch)
@@ -148,18 +153,15 @@ class Trainer:
 
                 logging.info('\n[Epoch {}] Acc = {:.6f} Time: {:.2f}\n'.format(epoch + 1, acc, time.time() - e_tic))
 
-                # Visualize one generated image each x epoch
-                if (epoch + 1) % self.opts.thumb_interval == 0:
-                    fake_img = fake[0]
-                    self.generate_thumb('epoch_thumbnail', fake_img, epoch + 1)
-
                 # Generate batch_size random images each x epochs
-                if (epoch + 1) % self.opts.extra_interval == 0:
-                    self.extra_thumb(epoch + 1)
+                #if (epoch + 1) % self.opts.extra_interval == 0:
+                #    self.extra_thumb(epoch + 1)
 
                 # Save models each x epochs
                 if (epoch + 1) % self.opts.checkpoint_interval == 0:
                     self.save_models(epoch + 1)
+
+            nd.waitall()
             self.save_models(self.opts.epochs)
 
     def save_models(self, epoch):

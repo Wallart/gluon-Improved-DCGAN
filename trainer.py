@@ -14,6 +14,7 @@ import shutil
 import logging
 import os
 
+
 def facc(label, pred):
     pred = pred.ravel()
     label = label.ravel()
@@ -77,17 +78,13 @@ class Trainer:
 
         with SummaryWriter(logdir=self.logs_path, flush_secs=5, verbose=False) as self.sw:
             for epoch in range(self.opts.epochs):
-                e_tic = time.time()
-
-                d_loss_scalar = 0
-                g_loss_scalar = 0
-
                 if not self.opts.no_hybridize and epoch == 1:
                     if self.opts.graph == 'generator':
                         self.sw.add_graph(self.g)
                     elif self.opts.graph == 'discriminator':
                         self.sw.add_graph(self.d)
 
+                e_tic = time.time()
                 for i, (d, l) in enumerate(train_data):
                     b_tic = time.time()
 
@@ -129,7 +126,7 @@ class Trainer:
                     loss_d_scalar = sum([e.mean().asscalar() for e in loss_d]) / len(loss_d)
                     loss_g_scalar = sum([e.mean().asscalar() for e in loss_g]) / len(loss_g)
 
-                    # Visualize one generated image each x epoch
+                    # Visualize generated image each x epoch over each gpus
                     if (epoch + 1) % self.opts.thumb_interval == 0:
                         for fake in fakes:
                             self.generate_thumb('epoch_thumbnail', fake[0], epoch + 1)
@@ -143,16 +140,16 @@ class Trainer:
                         logging.info('\tTime: {:.2f} second(s)'.format(batch_time))
                         logging.info('\tSpeed: {:.2f} samples/s'.format(self.opts.batch_size / batch_time))
 
-                name, acc = self.metric.get()
-                self.metric.reset()
+                    # Do epoch logging
+                    if i == len(train_data) - 1:
+                        _, acc = self.metric.get()
+                        self.metric.reset()
+                        logging.info('\n[Epoch {}] Acc = {:.6f} Time: {:.2f}\n'.format(epoch + 1, acc, time.time() - e_tic))
+                        self.sw.add_scalar(tag='generator_loss', value=loss_g_scalar, global_step=epoch)
+                        self.sw.add_scalar(tag='discriminator_loss', value=loss_d_scalar, global_step=epoch)
+                        self.sw.add_scalar(tag='accuracy', value=acc, global_step=epoch)
 
-                # Log to tensorboard
-                self.sw.add_scalar(tag='generator_loss', value=g_loss_scalar, global_step=epoch)
-                self.sw.add_scalar(tag='discriminator_loss', value=d_loss_scalar, global_step=epoch)
-                self.sw.add_scalar(tag='accuracy', value=acc, global_step=epoch)
-
-                logging.info('\n[Epoch {}] Acc = {:.6f} Time: {:.2f}\n'.format(epoch + 1, acc, time.time() - e_tic))
-
+                # TODO Fix extra thumbs
                 # Generate batch_size random images each x epochs
                 #if (epoch + 1) % self.opts.extra_interval == 0:
                 #    self.extra_thumb(epoch + 1)

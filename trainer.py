@@ -26,6 +26,8 @@ class Trainer:
         self.opts = opts
         self.d = Discriminator(opts)
         self.g = Generator(opts)
+        # from_sigmoid is required, or we have to remove the sigmoid activation layer in the discriminator network
+        self.loss = gluon.loss.SigmoidBinaryCrossEntropyLoss(from_sigmoid=True)
 
         self.sw = None
         self.stamp = 'DC-GAN-{}e-{}'.format(self.opts.epochs, datetime.now().strftime('%y_%m_%d-%H_%M'))
@@ -72,7 +74,6 @@ class Trainer:
             'clip_gradient': self.opts.clip_gradient
         })
 
-        loss = gluon.loss.SigmoidBinaryCrossEntropyLoss()
         latent_z = nd.random_normal(0, 1, shape=(self.opts.batch_size, self.opts.latent_z_size, 1, 1), ctx=self.opts.ctx)
 
         with SummaryWriter(logdir=self.logs_path, flush_secs=5, verbose=False) as self.sw:
@@ -99,13 +100,13 @@ class Trainer:
                     with autograd.record():
                         # Train with real image
                         output = self.d(data).reshape((-1, 1))
-                        err_d_real = loss(output, real_label)
+                        err_d_real = self.loss(output, real_label)
                         metric.update([real_label, ], [output, ])
 
                         # Train with fake image
                         fake = self.g(latent_z)
                         output = self.d(fake.detach()).reshape((-1, 1))
-                        err_d_fake = loss(output, fake_label)
+                        err_d_fake = self.loss(output, fake_label)
                         err_d = err_d_real + err_d_fake
                         err_d.backward()
                         metric.update([fake_label, ], [output, ])
@@ -119,7 +120,7 @@ class Trainer:
                     with autograd.record():
                         fake = self.g(latent_z)
                         output = self.d(fake).reshape((-1, 1))
-                        err_g = loss(output, real_label)
+                        err_g = self.loss(output, real_label)
                         err_g.backward()
 
                     g_trainer.step(self.opts.batch_size)

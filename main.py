@@ -27,11 +27,14 @@ def get_transformer(opts):
 def get_dataset_from_folder(opts):
     func = get_transformer(opts)
     train_data = gluon.data.DataLoader(gluon.data.vision.ImageFolderDataset(opts.dataset, transform=func),
-                                       batch_size=opts.batch_size, shuffle=True, last_batch='discard')
+                                       batch_size=opts.batch_size, shuffle=True,
+                                       last_batch='discard', num_workers=opts.workers)
     test_data = gluon.data.DataLoader(gluon.data.vision.ImageFolderDataset(opts.dataset, transform=func),
-                                      batch_size=opts.batch_size, shuffle=False, last_batch='discard')
+                                      batch_size=opts.batch_size, shuffle=False,
+                                      last_batch='discard', num_workers=opts.workers)
 
     return train_data, test_data
+
 
 def render(opts):
     model = os.path.expanduser(opts.generator)
@@ -45,6 +48,7 @@ def render(opts):
         latent_z = nd.random_normal(0, 1, shape=(1, opts.latent_z_size, 1, 1), ctx=opts.ctx)
         fake = gen(latent_z)
         Renderer.render(fake[0], img_name, output_dir)
+
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Improved Deep Convolutional Generative Adversarial Networks')
@@ -62,6 +66,7 @@ if __name__ == '__main__':
     train_parser.add_argument('-z', '--z-size', dest='latent_z_size', type=int, default=100, help='latent_z size')
     train_parser.add_argument('-c', '--colors', dest='num_colors', type=int, default=3, help='number of colors for generated images')
     train_parser.add_argument('-r', '--relu', dest='relu', action='store_true', help='use old relu layers instead of selu')
+    train_parser.add_argument('-w', '--workers', dest='workers', type=int, default=0, help='number of workers to use')
     train_parser.add_argument('--checkpoint-interval', dest='checkpoint_interval', type=int, default=25, help='models checkpointing interval (epochs)')
     train_parser.add_argument('--clip-gradient', dest='clip_gradient', type=float, default=10.0, help='clip gradient by projecting onto the box [-x, x]')
     train_parser.add_argument('--d-lr', dest='d_lr', type=float, default=0.00005, help='discriminator learning rate')

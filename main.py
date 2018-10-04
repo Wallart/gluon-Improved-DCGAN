@@ -43,11 +43,15 @@ def render(opts):
     gen = Generator(opts)
     gen.load_parameters(model, ctx=opts.ctx)
 
-    for _ in tqdm(range(0, opts.n_images)):
-        img_name = str(random.getrandbits(128))
-        latent_z = nd.random_normal(0, 1, shape=(1, opts.latent_z_size, 1, 1), ctx=opts.ctx)
-        fake = gen(latent_z)
-        Renderer.render(fake[0], img_name, output_dir)
+    n_ctx = len(opts.ctx)
+    for _ in tqdm(range(0, opts.n_images // n_ctx)):
+        latent_z = nd.random_normal(0, 1, shape=(n_ctx, opts.latent_z_size, 1, 1))
+        latent_z = gluon.utils.split_and_load(latent_z, ctx_list=opts.ctx, batch_axis=0)
+        for z in latent_z:
+            fakes = gen(z)
+            for fake in fakes:
+                img_name = str(random.getrandbits(128))
+                Renderer.render(fake, img_name, output_dir)
 
 
 if __name__ == '__main__':
@@ -92,8 +96,8 @@ if __name__ == '__main__':
     renderer_parser.add_argument('-o', '--output', dest='out_dir', type=str, default=os.getcwd(), help='images output directory')
     renderer_parser.add_argument('-r', '--relu', dest='relu', action='store_true', help='use old relu layers instead of selu')
     renderer_parser.add_argument('-z', '--z-size', dest='latent_z_size', type=int, default=100, help='latent_z size')
-    renderer_parser.add_argument('--g-hidden_size', dest='g_h_size', type=int, default=128, help='number of hidden nodes in the generator')
-    renderer_parser.add_argument('--no-gpu', dest='no_gpu', action='store_true', help='disable gpu usage')
+    renderer_parser.add_argument('--ngf', dest='ngf', type=int, default=128, help='number of hidden nodes in the generator')
+    renderer_parser.add_argument('--gpus', dest='gpus', type=str, default='', help='gpus id to use, fot example 0,1')
 
     args = parser.parse_args()
     try:

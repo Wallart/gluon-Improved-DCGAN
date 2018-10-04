@@ -76,7 +76,6 @@ if __name__ == '__main__':
     train_parser.add_argument('--d-lr', dest='d_lr', type=float, default=0.00005, help='discriminator learning rate')
     train_parser.add_argument('--d-model', dest='d_model', type=str, help='discriminator model')
     train_parser.add_argument('--disable-hybridize', dest='no_hybridize', action='store_true', help='disable mxnet hybridize network (debug purpose)')
-    train_parser.add_argument('--disable-visualize', dest='no_visualize', action='store_true', help='disable images in mxboard. Save on disk')
     train_parser.add_argument('--extra-interval', dest='extra_interval', type=int, default=30, help='extra thumbnails interval generation (epochs)')
     train_parser.add_argument('--g-lr', dest='g_lr', type=float, default=0.0002, help='generator learning rate')
     train_parser.add_argument('--g-model', dest='g_model', type=str, help='generator model')

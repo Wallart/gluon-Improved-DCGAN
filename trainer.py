@@ -11,6 +11,7 @@ import mxnet as mx
 import numpy as np
 import time
 import shutil
+import random
 import logging
 import os
 
@@ -27,7 +28,8 @@ class Trainer:
         self.opts = opts
         self.d = Discriminator(opts)
         self.g = Generator(opts)
-        # from_sigmoid is required, or we have to remove the sigmoid activation layer in the discriminator network
+
+        # It's more robust to compute sigmoid on the loss than in the discriminator
         self.loss = gluon.loss.SigmoidBinaryCrossEntropyLoss(from_sigmoid=False)
         self.metric = mx.metric.CustomMetric(facc)
 
@@ -50,7 +52,7 @@ class Trainer:
         self.images_path = os.path.join(path, 'images')
         self.models_path = os.path.join(path, 'models')
 
-        logging.basicConfig(format='%(message)s', level=logging.DEBUG)
+        logging.basicConfig(format='%(asctime)s %(message)s', level=logging.DEBUG)
 
     def train(self, train_data):
         self.hybridize()
@@ -77,6 +79,7 @@ class Trainer:
         fake_label = gluon.utils.split_and_load(nd.zeros((self.opts.batch_size,)), ctx_list=self.opts.ctx, batch_axis=0)
 
         with SummaryWriter(logdir=self.logs_path, flush_secs=5, verbose=False) as self.sw:
+            nb_iter = len(train_data)
             for epoch in range(self.opts.epochs):
                 if not self.opts.no_hybridize and epoch == 1:
                     if self.opts.graph == 'generator':
@@ -126,10 +129,16 @@ class Trainer:
                     loss_d_scalar = sum([e.mean().asscalar() for e in loss_d]) / len(loss_d)
                     loss_g_scalar = sum([e.mean().asscalar() for e in loss_g]) / len(loss_g)
 
+                    # Per iter reporting
+                    current_iter = (epoch * nb_iter) + i
+                    self.sw.add_scalar(tag='G_loss', value=loss_g_scalar, global_step=current_iter)
+                    self.sw.add_scalar(tag='D_loss', value=loss_d_scalar, global_step=current_iter)
+                    self.sw.add_scalar(tag='Acc', value=self.metric.get()[1], global_step=current_iter)
+
                     # Visualize generated image each x epoch over each gpus
                     if (epoch + 1) % self.opts.thumb_interval == 0:
-                        for fake in fakes:
-                            self.generate_thumb('epoch_thumbnail', fake[0], epoch + 1)
+                        for fakes_per_device in fakes:
+                            self.log_thumbnail('epoch_thumbnail', fakes_per_device[0], epoch + 1)
 
                     # Print log info every 10 batches
                     if i % 10 == 0:
@@ -140,47 +149,52 @@ class Trainer:
                         logging.info('\tTime: {:.2f} second(s)'.format(batch_time))
                         logging.info('\tSpeed: {:.2f} samples/s'.format(self.opts.batch_size / batch_time))
 
-                    # Do epoch logging
-                    if i == len(train_data) - 1:
-                        _, acc = self.metric.get()
-                        self.metric.reset()
-                        logging.info('\n[Epoch {}] Acc = {:.6f} Time: {:.2f}\n'.format(epoch + 1, acc, time.time() - e_tic))
-                        self.sw.add_scalar(tag='generator_loss', value=loss_g_scalar, global_step=epoch)
-                        self.sw.add_scalar(tag='discriminator_loss', value=loss_d_scalar, global_step=epoch)
-                        self.sw.add_scalar(tag='accuracy', value=acc, global_step=epoch)
+                _, acc = self.metric.get()
+                self.metric.reset()
+                logging.info('\n[Epoch {}] Acc = {:.6f} Time: {:.2f}\n'.format(epoch + 1, acc, time.time() - e_tic))
 
-                # TODO Fix extra thumbs
                 # Generate batch_size random images each x epochs
-                #if (epoch + 1) % self.opts.extra_interval == 0:
-                #    self.extra_thumb(epoch + 1)
+                if (epoch + 1) % self.opts.extra_interval == 0:
+                    self.extra_thumbnails(epoch + 1)
 
                 # Save models each x epochs
                 if (epoch + 1) % self.opts.checkpoint_interval == 0:
                     self.save_models(epoch + 1)
 
             nd.waitall()
-            self.save_models(self.opts.epochs)
+            self.save_models(self.opts.epochs, export=True)
 
-    def save_models(self, epoch):
+    def save_models(self, epoch, export=False):
         if not os.path.isdir(self.models_path):
             os.makedirs(self.models_path)
 
         self.d.save_parameters(os.path.join(self.models_path, 'd-{}-epochs.params'.format(epoch)))
         self.g.save_parameters(os.path.join(self.models_path, 'g-{}-epochs.params'.format(epoch)))
 
-    def generate_thumb(self, tag, img_arr, epoch):
-        if not self.opts.no_visualize:
-            image = ((img_arr + 1.0) * 127.5).astype(np.uint8)
-            self.sw.add_image(tag=tag, image=image, global_step=epoch)
-        else:
-            img_name = '{}-{}.png'.format(tag, epoch)
-            Renderer.render(img_arr, img_name, self.images_path)
+        if not self.opts.no_hybridize and export:
+            self.g.export(os.path.join(self.models_path, 'generator'), epoch=epoch)
+            self.d.export(os.path.join(self.models_path, 'discriminator'), epoch=epoch)
 
-    def extra_thumb(self, epoch):
-        for i in range(0, self.opts.batch_size):
-            latent_z = nd.random_normal(0, 1, shape=(self.opts.batch_size, self.opts.latent_z_size, 1, 1), ctx=self.opts.ctx)
-            fake = self.g(latent_z)
-            self.generate_thumb('Epoch_{}'.format(epoch), fake[0], epoch)
+    def log_thumbnail(self, tag, img_arr, epoch):
+        # Log thumbnail in MXBoard
+        image = ((img_arr + 1.0) * 127.5).astype(np.uint8)
+        self.sw.add_image(tag=tag, image=image, global_step=epoch)
+
+    def save_thumbnail(self, img_arr, epoch, suffix):
+        # Save thumbnail to disk
+        img_name = 'e{}-{}.png'.format(epoch, suffix)
+        Renderer.render(img_arr, img_name, self.images_path)
+
+    def extra_thumbnails(self, epoch):
+        n_ctx = len(self.opts.ctx)
+        for _ in range(0, 32 // n_ctx):
+            latent_z = nd.random_normal(0, 1, shape=(n_ctx, self.opts.latent_z_size, 1, 1))
+            latent_z = gluon.utils.split_and_load(latent_z, ctx_list=self.opts.ctx, batch_axis=0)
+            for z in latent_z:
+                fakes = self.g(z)
+                for fake in fakes:
+                    self.log_thumbnail('Epoch_{}'.format(epoch), fake, epoch)
+                    self.save_thumbnail(fake, epoch, str(random.getrandbits(128)))
 
     def initialize(self):
         if self.opts.g_model:

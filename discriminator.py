@@ -50,7 +50,7 @@ class Discriminator(gluon.HybridBlock):
 
             layer = nn.HybridSequential(prefix='')
             layer.add(nn.Conv2D(1, 4, 1, 0, use_bias=False, **self.init))
-            layer.add(nn.Activation('sigmoid'))
+            #layer.add(nn.Activation('sigmoid'))
             self.stages.add(layer)
 
             assert len(self.stages) == N_LAYERS[self.opts.image_size]

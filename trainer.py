@@ -28,7 +28,7 @@ class Trainer:
         self.d = Discriminator(opts)
         self.g = Generator(opts)
         # from_sigmoid is required, or we have to remove the sigmoid activation layer in the discriminator network
-        self.loss = gluon.loss.SigmoidBinaryCrossEntropyLoss(from_sigmoid=True)
+        self.loss = gluon.loss.SigmoidBinaryCrossEntropyLoss(from_sigmoid=False)
         self.metric = mx.metric.CustomMetric(facc)
 
         self.sw = None

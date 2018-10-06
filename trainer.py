@@ -138,8 +138,7 @@ class Trainer:
 
                     # Visualize generated image each x epoch over each gpus
                     if i == len(train_data) - 1 and (epoch + 1) % self.opts.thumb_interval == 0:
-                        for fakes_per_device in fakes:
-                            self.tensor_to_viz(fakes_per_device, 'Current epoch', epoch + 1)
+                        self.tensor_to_viz(nd.concat(*fakes, dim=0), epoch + 1, 'Current epoch')
 
                     # Print log info every 10 batches
                     if i % 10 == 0:
@@ -156,9 +155,9 @@ class Trainer:
 
                 # Generate batch_size random images each x epochs
                 if (epoch + 1) % self.opts.extra_interval == 0:
-                    tensor = mx.ndarray.concat(*[self.g(z) for z in fixed_noise], dim=0)
-                    self.tensor_to_viz(tensor, 'Epoch {}'.format(epoch + 1), epoch + 1)
-                    self.tensor_to_image(epoch + 1, tensor)
+                    tensor = nd.concat(*[self.g(z) for z in fixed_noise], dim=0)
+                    self.tensor_to_viz(tensor, epoch + 1, 'Epoch_{}'.format(epoch + 1))
+                    self.tensor_to_image(tensor, epoch + 1)
 
                 # Save models each x epochs
                 if (epoch + 1) % self.opts.checkpoint_interval == 0:
@@ -178,11 +177,11 @@ class Trainer:
             self.g.export(os.path.join(self.models_path, 'generator'), epoch=epoch)
             self.d.export(os.path.join(self.models_path, 'discriminator'), epoch=epoch)
 
-    def tensor_to_viz(self, tensor, tag, epoch):
+    def tensor_to_viz(self, tensor, epoch, tag):
         tensor = ((tensor + 1.0) * 127.5).astype(np.uint8)
-        self.sw.add_image(image=tensor, tag=tag, global_step=epoch)
+        self.sw.add_image(image=tensor, global_step=epoch, tag=tag)
 
-    def tensor_to_image(self, epoch, tensor):
+    def tensor_to_image(self, tensor, epoch):
         images = tensor.asnumpy().transpose(0, 2, 3, 1)
 
         row = int(math.sqrt(len(images)))

@@ -5,15 +5,15 @@ from mxboard import SummaryWriter
 from datetime import datetime
 from discriminator import Discriminator
 from generator import Generator
-from renderer import Renderer
+from PIL import Image
 
 import mxnet as mx
 import numpy as np
 import time
 import shutil
-import random
 import logging
 import os
+import math
 
 
 def facc(label, pred):
@@ -73,8 +73,8 @@ class Trainer:
             'clip_gradient': self.opts.clip_gradient
         })
 
-        latent_z = nd.random_normal(0, 1, shape=(self.opts.batch_size, self.opts.latent_z_size, 1, 1))
-        latent_z = gluon.utils.split_and_load(latent_z, ctx_list=self.opts.ctx, batch_axis=0)
+        fixed_noise = self.make_noise()
+
         real_label = gluon.utils.split_and_load(nd.ones((self.opts.batch_size,)), ctx_list=self.opts.ctx, batch_axis=0)
         fake_label = gluon.utils.split_and_load(nd.zeros((self.opts.batch_size,)), ctx_list=self.opts.ctx, batch_axis=0)
 
@@ -96,6 +96,7 @@ class Trainer:
                     ###########################
                     data = gluon.utils.split_and_load(d, ctx_list=self.opts.ctx, batch_axis=0)
                     # label = gluon.utils.split_and_load(l, ctx_list=self.opts.ctx, batch_axis=0)
+                    noise = self.make_noise()
                     nd.waitall()
 
                     with autograd.record():
@@ -104,7 +105,7 @@ class Trainer:
                         loss_d_real = [self.loss(x, y) for x, y in zip(r_output, real_label)]
                         self.metric.update(real_label, r_output)
 
-                        f_output = [self.d(self.g(z).detach()) for z in latent_z]
+                        f_output = [self.d(self.g(z).detach()) for z in noise]
                         loss_d_fake = [self.loss(x, y) for x, y in zip(f_output, fake_label)]
                         self.metric.update(fake_label, f_output)
 
@@ -119,7 +120,7 @@ class Trainer:
                     ###########################
 
                     with autograd.record():
-                        fakes = [self.g(z) for z in latent_z]
+                        fakes = [self.g(z) for z in noise]
                         loss_g = [self.loss(self.d(f), y) for f, y in zip(fakes, real_label)]
                         for loss in loss_g:
                             loss.backward()
@@ -136,9 +137,9 @@ class Trainer:
                     self.sw.add_scalar(tag='Acc', value=self.metric.get()[1], global_step=current_iter)
 
                     # Visualize generated image each x epoch over each gpus
-                    if (epoch + 1) % self.opts.thumb_interval == 0:
+                    if i == len(train_data) - 1 and (epoch + 1) % self.opts.thumb_interval == 0:
                         for fakes_per_device in fakes:
-                            self.log_thumbnail('epoch_thumbnail', fakes_per_device[0], epoch + 1)
+                            self.tensor_to_viz(fakes_per_device, 'Current epoch', epoch + 1)
 
                     # Print log info every 10 batches
                     if i % 10 == 0:
@@ -155,7 +156,9 @@ class Trainer:
 
                 # Generate batch_size random images each x epochs
                 if (epoch + 1) % self.opts.extra_interval == 0:
-                    self.extra_thumbnails(epoch + 1)
+                    tensor = mx.ndarray.concat(*[self.g(z) for z in fixed_noise], dim=0)
+                    self.tensor_to_viz(tensor, 'Epoch {}'.format(epoch + 1), epoch + 1)
+                    self.tensor_to_image(epoch + 1, tensor)
 
                 # Save models each x epochs
                 if (epoch + 1) % self.opts.checkpoint_interval == 0:
@@ -175,26 +178,31 @@ class Trainer:
             self.g.export(os.path.join(self.models_path, 'generator'), epoch=epoch)
             self.d.export(os.path.join(self.models_path, 'discriminator'), epoch=epoch)
 
-    def log_thumbnail(self, tag, img_arr, epoch):
-        # Log thumbnail in MXBoard
-        image = ((img_arr + 1.0) * 127.5).astype(np.uint8)
-        self.sw.add_image(tag=tag, image=image, global_step=epoch)
+    def tensor_to_viz(self, tensor, tag, epoch):
+        tensor = ((tensor + 1.0) * 127.5).astype(np.uint8)
+        self.sw.add_image(image=tensor, tag=tag, global_step=epoch)
 
-    def save_thumbnail(self, img_arr, epoch, suffix):
-        # Save thumbnail to disk
-        img_name = 'e{}-{}.png'.format(epoch, suffix)
-        Renderer.render(img_arr, img_name, self.images_path)
+    def tensor_to_image(self, epoch, tensor):
+        images = tensor.asnumpy().transpose(0, 2, 3, 1)
 
-    def extra_thumbnails(self, epoch):
-        n_ctx = len(self.opts.ctx)
-        for _ in range(0, 32 // n_ctx):
-            latent_z = nd.random_normal(0, 1, shape=(n_ctx, self.opts.latent_z_size, 1, 1))
-            latent_z = gluon.utils.split_and_load(latent_z, ctx_list=self.opts.ctx, batch_axis=0)
-            for z in latent_z:
-                fakes = self.g(z)
-                for fake in fakes:
-                    self.log_thumbnail('Epoch_{}'.format(epoch), fake, epoch)
-                    self.save_thumbnail(fake, epoch, str(random.getrandbits(128)))
+        row = int(math.sqrt(len(images)))
+        col = row
+        height = sum(image.shape[0] for image in images[0:row])
+        width = sum(image.shape[1] for image in images[0:col])
+        output = np.zeros((height, width, 3))
+
+        for i in range(row):
+            for j in range(col):
+                image = images[i * row + j]
+                h, w, d = image.shape
+                output[i * h:i * h + h, j * w:j * w + w] = image
+        output = (output * 255).clip(0, 255).astype(np.uint8)
+
+        if not os.path.isdir(self.images_path):
+            os.makedirs(self.images_path)
+
+        im = Image.fromarray(output)
+        im.save(os.path.join(self.images_path, 'epoch-{}.png'.format(epoch)))
 
     def initialize(self):
         if self.opts.g_model:
@@ -213,3 +221,7 @@ class Trainer:
         if not self.opts.no_hybridize:
             self.g.hybridize()
             self.d.hybridize()
+
+    def make_noise(self):
+        latent_z = nd.random.normal(0, 1, shape=(self.opts.batch_size, self.opts.latent_z_size, 1, 1))
+        return gluon.utils.split_and_load(latent_z, ctx_list=self.opts.ctx, batch_axis=0)

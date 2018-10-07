@@ -138,7 +138,7 @@ class Trainer:
 
                     # Visualize generated image each x epoch over each gpus
                     if i == len(train_data) - 1 and (epoch + 1) % self.opts.thumb_interval == 0:
-                        self.tensor_to_viz(nd.concat(*fakes, dim=0), epoch + 1, 'Current epoch')
+                        self.tensor_to_viz(nd.concat(*fakes, dim=0), epoch + 1, 'Current_epoch')
 
                     # Print log info every 10 batches
                     if i % 10 == 0:

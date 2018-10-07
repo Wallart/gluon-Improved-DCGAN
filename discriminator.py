@@ -1,5 +1,6 @@
 from mxnet import gluon
 from mxnet.gluon import nn
+from initializers import BatchNormInit
 
 import mxnet as mx
 
@@ -23,7 +24,13 @@ class Discriminator(gluon.HybridBlock):
         super(Discriminator, self).__init__(*args, **kwargs)
         self.opts = opts
         self.init = {
-            'weight_initializer': mx.init.Normal(0.02)
+            'conv': {
+                'weight_initializer': mx.init.Normal(0.02)
+            },
+            'bn': {
+                'beta_initializer': mx.init.Zero(),
+                'gamma_initializer': BatchNormInit()
+            }
         }
 
         i = 0
@@ -34,10 +41,10 @@ class Discriminator(gluon.HybridBlock):
             self.stages = nn.HybridSequential()
             # We have to produce (? x 4 x 4) features maps at layer n-1, whatever the original image size was
             while feature_map_size > 4:
-                layer = nn.HybridSequential()
-                layer.add(nn.Conv2D(self.opts.ndf * mult, 4, 2, 1, use_bias=False, **self.init))
+                layer = nn.HybridSequential(prefix='')
+                layer.add(nn.Conv2D(self.opts.ndf * mult, 4, 2, 1, use_bias=False, **self.init['conv']))
                 if i > 0:
-                    layer.add(nn.BatchNorm())
+                    layer.add(nn.BatchNorm(**self.init['bn']))
                 if self.opts.relu:
                     layer.add(nn.LeakyReLU(0.2))
                 else:
@@ -49,7 +56,7 @@ class Discriminator(gluon.HybridBlock):
                 self.stages.add(layer)
 
             layer = nn.HybridSequential(prefix='')
-            layer.add(nn.Conv2D(1, 4, 1, 0, use_bias=False, **self.init))
+            layer.add(nn.Conv2D(1, 4, 1, 0, use_bias=False, **self.init['conv']))
             #layer.add(nn.Activation('sigmoid'))
             self.stages.add(layer)
 
@@ -59,4 +66,4 @@ class Discriminator(gluon.HybridBlock):
 
     def hybrid_forward(self, F, x, *args, **kwargs):
         x = self.stages(x)
-        return F.reshape(x, shape=-1)  # .view(-1) in PyTorch => we need to rearrange 1x1x1 to 1
+        return F.reshape(x, shape=-1)

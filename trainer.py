@@ -208,13 +208,13 @@ class Trainer:
             g_model = os.path.expanduser(self.opts.g_model)
             self.g.load_parameters(g_model, ctx=self.opts.ctx)
         else:
-            self.g.initialize(mx.init.Normal(0.02), ctx=self.opts.ctx)
+            self.g.initialize(ctx=self.opts.ctx)
 
         if self.opts.d_model:
             d_model = os.path.expanduser(self.opts.d_model)
             self.d.load_parameters(d_model, ctx=self.opts.ctx)
         else:
-            self.d.initialize(mx.init.Normal(0.02), ctx=self.opts.ctx)
+            self.d.initialize(ctx=self.opts.ctx)
 
     def hybridize(self):
         if not self.opts.no_hybridize:

@@ -1,5 +1,6 @@
 from mxnet import gluon
 from mxnet.gluon import nn
+from initializers import BatchNormInit
 
 import mxnet as mx
 
@@ -31,7 +32,13 @@ class Generator(gluon.HybridBlock):
         super(Generator, self).__init__(*args, **kwargs)
         self.opts = opts
         self.init = {
-            'weight_initializer': mx.init.Normal(0.02)
+            'conv': {
+                'weight_initializer': mx.init.Normal(0.02)
+            },
+            'bn': {
+                'beta_initializer': mx.init.Zero(),
+                'gamma_initializer': BatchNormInit()
+            }
         }
 
         i = 0
@@ -45,8 +52,8 @@ class Generator(gluon.HybridBlock):
                 padding = 0 if i == 0 else 1
 
                 layer = nn.HybridSequential(prefix='')
-                layer.add(nn.Conv2DTranspose(self.opts.ngf * mult, 4, strides, padding, use_bias=False, **self.init))
-                layer.add(nn.BatchNorm())
+                layer.add(nn.Conv2DTranspose(self.opts.ngf * mult, 4, strides, padding, use_bias=False, **self.init['conv']))
+                layer.add(nn.BatchNorm(**self.init['bn']))
                 if self.opts.relu:
                     layer.add(nn.Activation('relu'))
                 else:
@@ -57,7 +64,7 @@ class Generator(gluon.HybridBlock):
                 self.stages.add(layer)
 
             layer = nn.HybridSequential(prefix='')
-            layer.add(nn.Conv2DTranspose(self.opts.num_colors, 4, 2, 1, use_bias=False, **self.init))
+            layer.add(nn.Conv2DTranspose(self.opts.num_colors, 4, 2, 1, use_bias=False, **self.init['conv']))
             layer.add(nn.Activation('tanh'))
             self.stages.add(layer)
 

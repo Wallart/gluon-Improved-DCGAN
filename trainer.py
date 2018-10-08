@@ -195,7 +195,7 @@ class Trainer:
                 image = images[i * row + j]
                 h, w, d = image.shape
                 output[i * h:i * h + h, j * w:j * w + w] = image
-        output = (output * 255).clip(0, 255).astype(np.uint8)
+        output = ((output + 1.0) * 127.5).astype(np.uint8)
 
         if not os.path.isdir(self.images_path):
             os.makedirs(self.images_path)

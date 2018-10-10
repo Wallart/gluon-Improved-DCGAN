@@ -178,7 +178,7 @@ class Trainer:
             self.d.export(os.path.join(self.models_path, 'discriminator'), epoch=epoch)
 
     def tensor_to_viz(self, tensor, epoch, tag):
-        tensor = ((tensor + 1.0) * 127.5).astype(np.uint8)
+        tensor = ((tensor.asnumpy() + 1.0) * 127.5).astype(np.uint8)
         self.sw.add_image(image=tensor, global_step=epoch, tag=tag)
 
     def tensor_to_image(self, tensor, epoch):

@@ -20,8 +20,35 @@ def get_transformer(opts):
         data = (data.astype(np.float32) / 128.0) - 1.0
         if data.shape[0] == 1:
             data = nd.tile(data, (3, 1, 1))
+        #label = label.astype(np.float32)
         return data, label
     return transformer
+
+
+def get_cifar10(opts):
+    func = get_transformer(opts)
+    train_data = gluon.data.DataLoader(gluon.data.vision.CIFAR10(opts.dataset, train=True, transform=func),
+                                       batch_size=opts.batch_size, shuffle=True,
+                                       last_batch='discard', num_workers=opts.workers)
+
+    test_data = gluon.data.DataLoader(gluon.data.vision.CIFAR10(opts.dataset, train=False, transform=func),
+                                      batch_size=opts.batch_size, shuffle=False,
+                                      last_batch='discard', num_workers=opts.workers)
+
+    return train_data, test_data
+
+
+def get_mnist(opts):
+    func = get_transformer(opts)
+    train_data = gluon.data.DataLoader(gluon.data.vision.MNIST(opts.dataset, train=True, transform=func),
+                                       batch_size=opts.batch_size, shuffle=True,
+                                       last_batch='discard', num_workers=opts.workers)
+
+    test_data = gluon.data.DataLoader(gluon.data.vision.MNIST(opts.dataset, train=False, transform=func),
+                                      batch_size=opts.batch_size, shuffle=False,
+                                      last_batch='discard', num_workers=opts.workers)
+
+    return train_data, test_data
 
 
 def get_dataset_from_folder(opts):
@@ -51,7 +78,7 @@ def render(opts):
             fakes = gen(z)
             for fake in fakes:
                 img_name = str(random.getrandbits(128))
-                Renderer.render(fake, img_name, output_dir)
+                Renderer.render(fake.asnumpy().transpose(1, 2, 0), img_name, output_dir)
 
 
 if __name__ == '__main__':
@@ -96,7 +123,7 @@ if __name__ == '__main__':
     renderer_parser.add_argument('-r', '--relu', dest='relu', action='store_true', help='use old relu layers instead of selu')
     renderer_parser.add_argument('-z', '--z-size', dest='latent_z_size', type=int, default=100, help='latent_z size')
     renderer_parser.add_argument('--ngf', dest='ngf', type=int, default=128, help='number of hidden nodes in the generator')
-    renderer_parser.add_argument('--gpus', dest='gpus', type=str, default='', help='gpus id to use, fot example 0,1')
+    renderer_parser.add_argument('--gpus', dest='gpus', type=str, default='', help='gpus id to use, for example 0,1')
 
     args = parser.parse_args()
     try:

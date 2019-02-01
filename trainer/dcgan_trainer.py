@@ -1,6 +1,7 @@
 from mxnet import autograd
 from mxnet import gluon
 from mxnet import nd
+from mxnet import profiler
 from mxboard import SummaryWriter
 from model.dc_gan.discriminator import Discriminator
 from model.dc_gan.generator import Generator
@@ -30,13 +31,15 @@ class DCGANTrainer(Trainer):
         self.d = Discriminator(opts)
         self.g = Generator(opts)
 
+        self.networks = [(self.g, self._outlogs_generator), (self.d, self._outlogs_discriminator)]
+
         # It's more robust to compute sigmoid on the loss than in the discriminator
         self.loss = gluon.loss.SigmoidBinaryCrossEntropyLoss(from_sigmoid=False)
         self._acc_metric = mx.metric.CustomMetric(facc)
         self._g_loss_metric = mx.metric.Loss('generator_loss')
         self._d_loss_metric = mx.metric.Loss('discriminator_loss')
 
-        #self._hybridize()
+        self._hybridize()
         self._initialize(pretrained_g=opts.g_model, pretrained_d=opts.d_model)
         self._g_trainer = gluon.Trainer(self.g.collect_params(), 'Adam', {
             'learning_rate': self.opts.g_lr,
@@ -68,14 +71,14 @@ class DCGANTrainer(Trainer):
                 self._g_loss_metric.reset()
                 self._d_loss_metric.reset()
 
-                # if not self.opts.no_hybridize and epoch == 1:
-                #     if self.opts.graph == 'generator':
-                #         self.sw.add_graph(self.g)
-                #     elif self.opts.graph == 'discriminator':
-                #         self.sw.add_graph(self.d)
-
                 for i, (d, l) in enumerate(train_data):
                     self.b_tick()
+
+                    self._visualize_graphs(epoch, i)
+                    self._visualize_weights(writer, epoch)
+
+                    if self._profile and epoch == 0 and i == 1:
+                        profiler.set_state('run')
 
                     ############################
                     # (1) Update D network: maximize log(D(x)) + log(1 - D(G(z)))
@@ -214,3 +217,19 @@ class DCGANTrainer(Trainer):
 
         outfile = os.path.join(self._outchkpts, '{}-{:04d}.chkpt'.format('DCGAN_discriminator', cur_epoch))
         self.d.save_parameters(outfile)
+
+    def _visualize_graphs(self, cur_epoch, cur_iter):
+        if cur_epoch == 0 and cur_iter == 1:
+            for net, out_path in self.networks:
+                with SummaryWriter(logdir=out_path, flush_secs=5, verbose=False) as writer:
+                    writer.add_graph(net)
+
+    def _visualize_weights(self, writer, cur_epoch):
+        if self._viz_interval > 0 and cur_epoch % self._viz_interval == 0:
+            for net, _ in self.networks:
+                # to visualize gradients each x epochs
+                params = [p for p in net.collect_params().values() if type(p) == gluon.Parameter and p._grad]
+                for p in params:
+                    name = '{}/{}/{}'.format(net._name, '_'.join(p.name.split('_')[:-1]), p.name.split('_')[-1])
+                    aggregated_grads = nd.concat(*[grad.as_in_context(mx.cpu()) for grad in p._grad], dim=0)
+                    writer.add_histogram(tag=name, values=aggregated_grads, global_step=cur_epoch + 1, bins=1000)

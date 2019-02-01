@@ -99,9 +99,11 @@ if __name__ == '__main__':
     train_parser.add_argument('--ndf', type=int, default=128, help='size of feature maps to handle in discriminator')
     train_parser.add_argument('--ngf', type=int, default=128, help='size of feature maps to produce in generator, whatever images size is')
     train_parser.add_argument('--overwrite', action='store_true', help='overwrite model if output directory already exists')
+    train_parser.add_argument('--profile', action='store_true', help='enable profiling')
     train_parser.add_argument('--log-interval', dest='log_interval', type=int, help='iterations log interval')
     train_parser.add_argument('--chkpt-interval', dest='chkpt_interval', type=int, help='model checkpointing interval (epochs)')
     train_parser.add_argument('--thumb-interval', dest='thumb_interval', type=int, default=1, help='thumbnail interval generation (epochs)')
+    train_parser.add_argument('--viz-interval', dest='viz_interval', type=int, help='model visualization interval (epochs)')
     train_parser.add_argument('--weight-decay', dest='wd', type=int, default=0, help='weight decay')
 
     renderer_parser = sub_parsers.add_parser('render')

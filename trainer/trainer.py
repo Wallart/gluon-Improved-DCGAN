@@ -21,8 +21,8 @@ class Trainer(ABC):
 
         self._log_interval = opts.log_interval or 5
         self._chkpt_interval = opts.chkpt_interval or 30
-        #self._viz_interval = opts.viz_interval or 2
-        #self._profile = opts.profile
+        self._viz_interval = opts.viz_interval or 0
+        self._profile = opts.profile
 
         self._epoch_tick = 0
         self._batch_tick = 0
@@ -31,13 +31,15 @@ class Trainer(ABC):
         self._outdir = opts.outdir or os.path.join(os.getcwd(), '{}-{}e-{}'.format(model_name, self._epochs, datetime.now().strftime('%y_%m_%d-%H_%M')))
         self._outdir = os.path.expanduser(self._outdir)
         self._outlogs = os.path.join(self._outdir, 'logs')
+        self._outlogs_generator = os.path.join(self._outlogs, 'generator')
+        self._outlogs_discriminator = os.path.join(self._outlogs, 'discriminator')
         self._outchkpts = os.path.join(self._outdir, 'checkpoints')
         self._outimages = os.path.join(self._outdir, 'images')
         self._prepare_outdir()
 
-        #if self._profile:
-        #    self._outprofile = os.path.join(self._outdir, 'profile.json')
-        #    profiler.set_config(profile_all=True, aggregate_stats=True, filename=self._outprofile)
+        if self._profile:
+            self._outprofile = os.path.join(self._outdir, 'profile.json')
+            profiler.set_config(profile_all=True, aggregate_stats=True, filename=self._outprofile)
 
         logging.basicConfig()
         self._logger = logging.getLogger()
@@ -50,7 +52,8 @@ class Trainer(ABC):
         elif os.path.isdir(self._outdir) and self._overwrite:
             shutil.rmtree(self._outdir)
 
-        os.makedirs(self._outlogs)
+        os.makedirs(self._outlogs_generator)
+        os.makedirs(self._outlogs_discriminator)
         os.makedirs(self._outchkpts)
         os.makedirs(self._outimages)
 

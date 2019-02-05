@@ -65,10 +65,10 @@ class DCGANTrainer(Trainer):
         return d
 
     def train(self, train_data):
-        fixed_noise = self.make_noise()
+        fixed_g_inputs = self.make_noise()
 
-        real_label = gluon.utils.split_and_load(nd.ones((self._batch_size,)), ctx_list=self._opts.ctx, batch_axis=0)
-        fake_label = gluon.utils.split_and_load(nd.zeros((self._batch_size,)), ctx_list=self._opts.ctx, batch_axis=0)
+        real_labels = gluon.utils.split_and_load(nd.ones((self._batch_size,)), ctx_list=self._opts.ctx, batch_axis=0)
+        fake_labels = gluon.utils.split_and_load(nd.zeros((self._batch_size,)), ctx_list=self._opts.ctx, batch_axis=0)
 
         with SummaryWriter(logdir=self._outlogs, flush_secs=5, verbose=False) as writer:
             num_iter = len(train_data)
@@ -91,25 +91,26 @@ class DCGANTrainer(Trainer):
                     ############################
                     # (1) Update D network: maximize log(D(x)) + log(1 - D(G(z)))
                     ###########################
-                    data = gluon.utils.split_and_load(d, ctx_list=self._opts.ctx, batch_axis=0)
+                    real_images = gluon.utils.split_and_load(d, ctx_list=self._opts.ctx, batch_axis=0)
                     # label = gluon.utils.split_and_load(l, ctx_list=self._opts.ctx, batch_axis=0)
-                    noise = self.make_noise()
+
+                    g_inputs = self.make_noise()
                     nd.waitall()
 
                     with autograd.record():
                         # Train with real image then fake image
-                        r_output = [self.d(x) for x in data]
-                        loss_d_real = [self.binary_loss(x, y) for x, y in zip(r_output, real_label)]
-                        self._acc_metric.update(real_label, r_output)
+                        real_outputs = [self.d(x) for x in real_images]
+                        loss_d_real = [self._binary_loss(x, y) for x, y in zip(real_outputs, real_labels)]
+                        self._acc_metric.update(real_labels, real_outputs)
 
-                        f_output = [self.d(self.g(z).detach()) for z in noise]
-                        loss_d_fake = [self.binary_loss(x, y) for x, y in zip(f_output, fake_label)]
-                        self._acc_metric.update(fake_label, f_output)
+                        fake_outputs = [self.d(self.g(z).detach()) for z in g_inputs]
+                        loss_d_fake = [self._binary_loss(x, y) for x, y in zip(fake_outputs, fake_labels)]
+                        self._acc_metric.update(fake_labels, fake_outputs)
 
                         loss_d = [r + f for r, f in zip(loss_d_real, loss_d_fake)]
                         self._d_loss_metric.update(0, loss_d)
-                        autograd.backward(loss_d)
 
+                    autograd.backward(loss_d)
                     self._d_trainer.step(self._batch_size)
 
                     ############################
@@ -117,11 +118,11 @@ class DCGANTrainer(Trainer):
                     ###########################
 
                     with autograd.record():
-                        fakes = [self.g(z) for z in noise]
-                        loss_g = [self.binary_loss(self.d(f), y) for f, y in zip(fakes, real_label)]
+                        fakes = [self.g(z) for z in g_inputs]
+                        loss_g = [self._binary_loss(self.d(f), y) for f, y in zip(fakes, real_labels)]
                         self._g_loss_metric.update(0, loss_g)
-                        autograd.backward(loss_g)
 
+                    autograd.backward(loss_g)
                     self._g_trainer.step(self._batch_size)
 
                     # Visualize generated image each x epoch over each gpus
@@ -152,7 +153,7 @@ class DCGANTrainer(Trainer):
 
                 # generate batch_size random images each x epochs
                 if global_step % self._opts.extra_interval == 0:
-                    tensor = nd.concat(*[self.g(z) for z in fixed_noise], dim=0)
+                    tensor = nd.concat(*[self.g(z) for z in fixed_g_inputs], dim=0)
                     tensor_to_viz(writer, tensor, global_step, 'Epoch_{}_fixed_noise'.format(global_step))
                     tensor_to_image(self._outimages, tensor, global_step)
 

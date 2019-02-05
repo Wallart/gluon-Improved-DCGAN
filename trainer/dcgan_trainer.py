@@ -29,8 +29,7 @@ class DCGANTrainer(Trainer):
         self._g_loss_metric = mx.metric.Loss('generator_loss')
         self._d_loss_metric = mx.metric.Loss('discriminator_loss')
 
-        self._hybridize()
-
+        self._hybridize(self.g)
         self._initialize(self.g, opts.g_model)
         self._g_trainer = gluon.Trainer(self.g.collect_params(), 'Adam', {
             'learning_rate': self._opts.g_lr,
@@ -40,6 +39,7 @@ class DCGANTrainer(Trainer):
             'clip_gradient': self._opts.clip_gradient
         })
 
+        self._hybridize(self.d)
         self._initialize(self.d, opts.d_model)
         self._d_trainer = gluon.Trainer(self.d.collect_params(), 'Adam', {
             'learning_rate': self._opts.d_lr,
@@ -171,10 +171,9 @@ class DCGANTrainer(Trainer):
         else:
             net.initialize(ctx=self._opts.ctx)
 
-    def _hybridize(self):
+    def _hybridize(self, net):
         if not self._opts.no_hybridize:
-            self.g.hybridize()
-            self.d.hybridize()
+            net.hybridize()
 
     def make_noise(self):
         latent_z = nd.random.normal(0, 1, shape=(self._batch_size, self._opts.latent_z_size, 1, 1))

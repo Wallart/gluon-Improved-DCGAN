@@ -126,6 +126,9 @@ if __name__ == '__main__':
         args.ctx = [mx.cpu()]
 
     if args.action == 'train':
+        args.d_model = os.path.expanduser(args.d_model) if args.d_model else args.d_model
+        args.g_model = os.path.expanduser(args.g_model) if args.g_model else args.g_model
+
         train_dataset = get_dataset_from_folder(args)
         trainer = DCGANTrainer(args)
         trainer.train(train_dataset)

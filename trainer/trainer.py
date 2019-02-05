@@ -14,25 +14,26 @@ class TrainerException(Exception):
 
 class Trainer(ABC):
 
-    def __init__(self, opts, model_name):
+    def __init__(self, opts):
+        self._opts = opts
         self._epochs = opts.epochs
         self._batch_size = opts.batch_size
         self._ctx = opts.ctx
 
         self._log_interval = opts.log_interval or 5
         self._chkpt_interval = opts.chkpt_interval or 30
-        self._viz_interval = opts.viz_interval or 0
+        self._viz_interval = opts.viz_interval or 2
         self._profile = opts.profile
 
         self._epoch_tick = 0
         self._batch_tick = 0
 
+        self._networks = []
+
         self._overwrite = opts.overwrite
-        self._outdir = opts.outdir or os.path.join(os.getcwd(), '{}-{}e-{}'.format(model_name, self._epochs, datetime.now().strftime('%y_%m_%d-%H_%M')))
+        self._outdir = opts.outdir or os.path.join(os.getcwd(), '{}-{}e-{}'.format(self.model_name(), self._epochs, datetime.now().strftime('%y_%m_%d-%H_%M')))
         self._outdir = os.path.expanduser(self._outdir)
         self._outlogs = os.path.join(self._outdir, 'logs')
-        self._outlogs_generator = os.path.join(self._outlogs, 'generator')
-        self._outlogs_discriminator = os.path.join(self._outlogs, 'discriminator')
         self._outchkpts = os.path.join(self._outdir, 'checkpoints')
         self._outimages = os.path.join(self._outdir, 'images')
         self._prepare_outdir()
@@ -52,8 +53,7 @@ class Trainer(ABC):
         elif os.path.isdir(self._outdir) and self._overwrite:
             shutil.rmtree(self._outdir)
 
-        os.makedirs(self._outlogs_generator)
-        os.makedirs(self._outlogs_discriminator)
+        os.makedirs(self._outlogs)
         os.makedirs(self._outchkpts)
         os.makedirs(self._outimages)
 
@@ -82,6 +82,10 @@ class Trainer(ABC):
         pass
 
     @abstractmethod
+    def model_name(self):
+        pass
+
+    @abstractmethod
     def _export_model(self, num_epoch):
         pass
 
@@ -90,5 +94,5 @@ class Trainer(ABC):
         pass
 
     @abstractmethod
-    def _initialize(self, pretrained_g, pretrained_d):
+    def _initialize(self, net, pretrained=None):
         pass

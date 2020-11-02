@@ -154,7 +154,7 @@ class DCGANTrainer(Trainer):
                 # generate batch_size random images each x epochs
                 if global_step % self._opts.extra_interval == 0:
                     tensor = nd.concat(*[self.g(z) for z in fixed_g_inputs], dim=0)
-                    tensor_to_viz(writer, tensor, global_step, 'Epoch_{}_fixed_noise'.format(global_step))
+                    tensor_to_viz(writer, tensor, global_step, 'fixed_noise')
                     tensor_to_image(self._outimages, tensor, global_step)
 
                 # save model each x epochs

@@ -1,74 +1,39 @@
-from mxnet import autograd
-from mxnet import gluon
-from mxnet import nd
-from mxnet import profiler
+from model import get_model
 from mxboard import SummaryWriter
-from trainer.trainer import Trainer
+from trainer.gan_trainer import GANTrainer
 from model.dc_gan.generator import Generator
+from mxnet import nd, gluon, profiler, autograd
 from model.dc_gan.discriminator import Discriminator
-from utils.metrics import facc
 from utils.tensor import tensor_to_image, tensor_to_viz
 
-import mxnet as mx
-import logging
 import os
+import logging
 
 
-class DCGANTrainer(Trainer):
+class DCGANTrainer(GANTrainer):
 
     def __init__(self, opts):
         super(DCGANTrainer, self).__init__(opts)
 
-        self.d = self._build_discriminator(opts)
-        self.g = self._build_generator(opts)
-
         # It's more robust to compute sigmoid on the loss than in the discriminator
         self._binary_loss = gluon.loss.SigmoidBinaryCrossEntropyLoss(from_sigmoid=False)
 
-        self._acc_metric = mx.metric.CustomMetric(facc)
-        self._g_loss_metric = mx.metric.Loss('generator_loss')
-        self._d_loss_metric = mx.metric.Loss('discriminator_loss')
-
-        self._hybridize(self.g)
-        self._initialize(self.g, opts.g_model)
-        self._g_trainer = gluon.Trainer(self.g.collect_params(), 'Adam', {
-            'learning_rate': self._opts.g_lr,
-            'wd': self._opts.wd,
-            'beta1': self._opts.beta1,
-            'beta2': self._opts.beta2,
-            'clip_gradient': self._opts.clip_gradient
-        })
-
-        self._hybridize(self.d)
-        self._initialize(self.d, opts.d_model)
-        self._d_trainer = gluon.Trainer(self.d.collect_params(), 'Adam', {
-            'learning_rate': self._opts.d_lr,
-            'wd': self._opts.wd,
-            'beta1': self._opts.beta1,
-            'beta2': self._opts.beta2,
-            'clip_gradient': self._opts.clip_gradient
-        })
-
-    def model_name(self):
-        return 'DCGAN'
-
-    def _build_generator(self, opts):
-        g = Generator(opts)
-        logs = os.path.join(self._outlogs, 'generator')
-        self._networks.append((g, logs))
-        return g
-
     def _build_discriminator(self, opts):
-        d = Discriminator(opts)
+        d = get_model(opts, opts.ctx, Discriminator, model_path=opts.d_model, symbol_path=opts.d_symbol)
         logs = os.path.join(self._outlogs, 'discriminator')
         self._networks.append((d, logs))
         return d
 
-    def train(self, train_data):
-        fixed_g_inputs = self.make_noise()
+    def _build_generator(self, opts):
+        g = get_model(opts, opts.ctx, Generator, model_path=opts.g_model, symbol_path=opts.g_symbol)
+        logs = os.path.join(self._outlogs, 'generator')
+        self._networks.append((g, logs))
+        return g
 
-        real_labels = gluon.utils.split_and_load(nd.ones((self._batch_size,)), ctx_list=self._opts.ctx, batch_axis=0)
+    def train(self, train_data):
+        truth_labels = gluon.utils.split_and_load(nd.ones((self._batch_size,)), ctx_list=self._opts.ctx, batch_axis=0)
         fake_labels = gluon.utils.split_and_load(nd.zeros((self._batch_size,)), ctx_list=self._opts.ctx, batch_axis=0)
+        fixed_z_samples = self._sample_z()
 
         with SummaryWriter(logdir=self._outlogs, flush_secs=5, verbose=False) as writer:
             num_iter = len(train_data)
@@ -91,46 +56,50 @@ class DCGANTrainer(Trainer):
                     ############################
                     # (1) Update D network: maximize log(D(x)) + log(1 - D(G(z)))
                     ###########################
-                    real_images = gluon.utils.split_and_load(d, ctx_list=self._opts.ctx, batch_axis=0)
+                    images = gluon.utils.split_and_load(d, ctx_list=self._opts.ctx, batch_axis=0)
                     # label = gluon.utils.split_and_load(l, ctx_list=self._opts.ctx, batch_axis=0)
-
-                    g_inputs = self.make_noise()
-                    nd.waitall()
+                    z_samples = self._sample_z()
 
                     with autograd.record():
                         # Train with real image then fake image
-                        real_outputs = [self.d(x) for x in real_images]
-                        loss_d_real = [self._binary_loss(x, y) for x, y in zip(real_outputs, real_labels)]
-                        self._acc_metric.update(real_labels, real_outputs)
+                        discriminated_images = [self._d(x) for x in images]
+                        loss_d_truth = [self._binary_loss(x, y) for x, y in zip(discriminated_images, truth_labels)]
+                        self._acc_metric.update(truth_labels, discriminated_images)
 
-                        fake_outputs = [self.d(self.g(z).detach()) for z in g_inputs]
-                        loss_d_fake = [self._binary_loss(x, y) for x, y in zip(fake_outputs, fake_labels)]
-                        self._acc_metric.update(fake_labels, fake_outputs)
+                        discriminated_fakes = [self._d(self._g(z).detach()) for z in z_samples]
+                        loss_d_fake = [self._binary_loss(x, y) for x, y in zip(discriminated_fakes, fake_labels)]
+                        self._acc_metric.update(fake_labels, discriminated_fakes)
 
-                        loss_d = [r + f for r, f in zip(loss_d_real, loss_d_fake)]
+                        loss_d = [t + f for t, f in zip(loss_d_truth, loss_d_fake)]
                         self._d_loss_metric.update(0, loss_d)
 
-                    autograd.backward(loss_d)
-                    self._d_trainer.step(self._batch_size)
+                    if (i + 1) % self._d_rounds == 0:
+                        # Don't compute the mean of loss
+                        # because SigmoidBinaryCrossEntropyLoss is already returning a mean
+                        autograd.backward(loss_d)
+                        self._d_trainer.step(self._batch_size)
 
                     ############################
                     # (2) Update G network: maximize log(D(G(z)))
                     ###########################
 
                     with autograd.record():
-                        fakes = [self.g(z) for z in g_inputs]
-                        loss_g = [self._binary_loss(self.d(f), y) for f, y in zip(fakes, real_labels)]
+                        fakes = [self._g(z) for z in z_samples]
+                        loss_g = [self._binary_loss(self._d(f), y) for f, y in zip(fakes, truth_labels)]
                         self._g_loss_metric.update(0, loss_g)
 
-                    autograd.backward(loss_g)
-                    self._g_trainer.step(self._batch_size)
+                    if (i + 1) % self._g_rounds == 0:
+                        # Don't compute the mean of loss
+                        # because SigmoidBinaryCrossEntropyLoss is already returning a mean
+                        autograd.backward(loss_g)
+                        self._g_trainer.step(self._batch_size)
 
                     # Visualize generated image each x epoch over each gpus
-                    if i == len(train_data) - 1 and (epoch + 1) % self._opts.thumb_interval == 0:
-                        tensor_to_viz(writer, nd.concat(*fakes, dim=0), epoch + 1, 'Current_epoch_random_noise')
+                    if (i + 1) == num_iter and (epoch + 1) % self._opts.thumb_interval == 0:
+                        tensor_to_viz(writer, fakes, epoch + 1, 'current_z_samples')
 
                     # per x iter logging
-                    if i % self._log_interval == 0:
+                    if (i + 1) % self._log_interval == 0:
                         b_time = self.b_ellapsed()
                         speed = self._batch_size / b_time
                         iter_stats = 'exec time: {:.2f} second(s) speed: {:.2f} samples/s'.format(b_time, speed)
@@ -153,9 +122,9 @@ class DCGANTrainer(Trainer):
 
                 # generate batch_size random images each x epochs
                 if global_step % self._opts.extra_interval == 0:
-                    tensor = nd.concat(*[self.g(z) for z in fixed_g_inputs], dim=0)
-                    tensor_to_viz(writer, tensor, global_step, 'fixed_noise')
-                    tensor_to_image(self._outimages, tensor, global_step)
+                    extra_fakes = [self._g(z) for z in fixed_z_samples]
+                    tensor_to_viz(writer, extra_fakes, global_step, 'fixed_samples')
+                    tensor_to_image(self._outimages, extra_fakes, global_step)
 
                 # save model each x epochs
                 if global_step % self._chkpt_interval == 0:
@@ -165,46 +134,9 @@ class DCGANTrainer(Trainer):
             self._save_profile()
             self._export_model(self._epochs)
 
-    def _initialize(self, net, pretrained=None):
-        if pretrained:
-            net.load_parameters(pretrained, ctx=self._opts.ctx)
-        else:
-            net.initialize(ctx=self._opts.ctx)
+    def model_name(self):
+        return 'DCGAN'
 
-    def _hybridize(self, net):
-        if not self._opts.no_hybridize:
-            net.hybridize()
-
-    def make_noise(self):
+    def _sample_z(self):
         latent_z = nd.random.normal(0, 1, shape=(self._batch_size, self._opts.latent_z_size, 1, 1))
         return gluon.utils.split_and_load(latent_z, ctx_list=self._opts.ctx, batch_axis=0)
-
-    def _export_model(self, num_epoch):
-        outfile = os.path.join(self._outdir, '{}_generator'.format(self.model_name()))
-        self.g.export(outfile, epoch=num_epoch)
-
-        outfile = os.path.join(self._outdir, '{}_discriminator'.format(self.model_name()))
-        self.d.export(outfile, epoch=num_epoch)
-
-    def _do_checkpoint(self, cur_epoch):
-        outfile = os.path.join(self._outchkpts, '{}_{}-{:04d}.chkpt'.format(self.model_name(), 'generator', cur_epoch))
-        self.g.save_parameters(outfile)
-
-        outfile = os.path.join(self._outchkpts, '{}_{}-{:04d}.chkpt'.format(self.model_name(), 'discriminator', cur_epoch))
-        self.d.save_parameters(outfile)
-
-    def _visualize_graphs(self, cur_epoch, cur_iter):
-        if cur_epoch == 0 and cur_iter == 1:
-            for net, out_path in self._networks:
-                with SummaryWriter(logdir=out_path, flush_secs=5, verbose=False) as writer:
-                    writer.add_graph(net)
-
-    def _visualize_weights(self, writer, cur_epoch, cur_iter):
-        if self._viz_interval > 0 and cur_iter == 0 and cur_epoch % self._viz_interval == 0:
-            for net, _ in self._networks:
-                # to visualize gradients each x epochs
-                params = [p for p in net.collect_params().values() if type(p) == gluon.Parameter and p._grad]
-                for p in params:
-                    name = '{}/{}/{}'.format(net._name, '_'.join(p.name.split('_')[:-1]), p.name.split('_')[-1])
-                    aggregated_grads = nd.concat(*[grad.as_in_context(mx.cpu()) for grad in p._grad], dim=0)
-                    writer.add_histogram(tag=name, values=aggregated_grads, global_step=cur_epoch + 1, bins=1000)

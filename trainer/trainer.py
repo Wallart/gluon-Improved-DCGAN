@@ -92,7 +92,3 @@ class Trainer(ABC):
     @abstractmethod
     def _do_checkpoint(self, cur_epoch):
         pass
-
-    @abstractmethod
-    def _initialize(self, net, pretrained=None):
-        pass

@@ -47,7 +47,7 @@ if __name__ == '__main__':
     train_parser.add_argument('-z', '--z-size', dest='latent_z_size', type=int, default=100, help='latent_z size')
     train_parser.add_argument('-c', '--colors', dest='num_colors', type=int, choices=[1, 3], default=3, help='number of colors for generated images')
     train_parser.add_argument('-r', '--relu', dest='relu', action='store_true', help='use old relu layers instead of selu')
-    train_parser.add_argument('-w', '--workers', dest='workers', type=int, default=os.cpu_count(), help='number of workers to use')
+    train_parser.add_argument('-w', '--workers', dest='workers', type=int, default=0, help='number of workers to use')
     train_parser.add_argument('--clip-gradient', dest='clip_gradient', type=float, default=10.0, help='clip gradient by projecting onto the box [-x, x]')
     train_parser.add_argument('--weight-decay', dest='wd', type=int, default=0, help='weight decay')
 
@@ -61,6 +61,9 @@ if __name__ == '__main__':
 
     train_parser.add_argument('--no-hybridize', dest='no_hybridize', action='store_true', help='disable mxnet hybridize network (debug purpose)')
     train_parser.add_argument('--gpus', dest='gpus', type=str, default='', help='gpus id to use, for example 0,1')
+
+    train_parser.add_argument('--cond', dest='conditional', action='store_true', help='enables conditional GAN training.')
+    train_parser.add_argument('--embed-size', type=int, default=64, help='For conditional GAN. Label embed dim')
 
     train_parser.add_argument('--ndf', type=int, default=128, help='size of feature maps to handle in discriminator')
     train_parser.add_argument('--ngf', type=int, default=128, help='size of feature maps to produce in generator, whatever images size is')
@@ -100,6 +103,7 @@ if __name__ == '__main__':
     args.ctx = get_ctx(args)
     if args.action == 'train':
         dataset = datasets[args.dataset_type](args)
+        args.num_classes = len(dataset._dataset.synsets)
 
         trainer = DCGANTrainer(args)
         trainer.train(dataset.get())

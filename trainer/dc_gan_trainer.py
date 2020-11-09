@@ -15,6 +15,7 @@ class DCGANTrainer(GANTrainer):
     def __init__(self, opts):
         super(DCGANTrainer, self).__init__(opts)
 
+        self._conditional = opts.conditional
         # It's more robust to compute sigmoid on the loss than in the discriminator
         self._binary_loss = gluon.loss.SigmoidBinaryCrossEntropyLoss(from_sigmoid=False)
 
@@ -31,9 +32,15 @@ class DCGANTrainer(GANTrainer):
         return g
 
     def train(self, train_data):
+        n_gpus = len(self._opts.ctx)
         truth_labels = gluon.utils.split_and_load(nd.ones((self._batch_size,)), ctx_list=self._opts.ctx, batch_axis=0)
         fake_labels = gluon.utils.split_and_load(nd.zeros((self._batch_size,)), ctx_list=self._opts.ctx, batch_axis=0)
         fixed_z_samples = self._sample_z()
+
+        fixed_classes = [None] * n_gpus
+        if self._conditional:
+            fixed_classes = nd.concat(nd.zeros((self._batch_size // 2,)), nd.ones((self._batch_size // 2,)), dim=0)
+            fixed_classes = gluon.utils.split_and_load(fixed_classes, ctx_list=self._opts.ctx, batch_axis=0)
 
         with SummaryWriter(logdir=self._outlogs, flush_secs=5, verbose=False) as writer:
             num_iter = len(train_data)
@@ -44,7 +51,7 @@ class DCGANTrainer(GANTrainer):
                 self._g_loss_metric.reset()
                 self._d_loss_metric.reset()
 
-                for i, (d, l) in enumerate(train_data):
+                for i, (d, c) in enumerate(train_data):
                     self.b_tick()
 
                     self._visualize_graphs(epoch, i)
@@ -57,16 +64,16 @@ class DCGANTrainer(GANTrainer):
                     # (1) Update D network: maximize log(D(x)) + log(1 - D(G(z)))
                     ###########################
                     images = gluon.utils.split_and_load(d, ctx_list=self._opts.ctx, batch_axis=0)
-                    # label = gluon.utils.split_and_load(l, ctx_list=self._opts.ctx, batch_axis=0)
+                    classes = gluon.utils.split_and_load(c, ctx_list=self._opts.ctx, batch_axis=0) if self._conditional else [None] * n_gpus
                     z_samples = self._sample_z()
 
                     with autograd.record():
                         # Train with real image then fake image
-                        discriminated_images = [self._d(x) for x in images]
+                        discriminated_images = [self._d(x, c) for x, c in zip(images, classes)]
                         loss_d_truth = [self._binary_loss(x, y) for x, y in zip(discriminated_images, truth_labels)]
                         self._acc_metric.update(truth_labels, discriminated_images)
 
-                        discriminated_fakes = [self._d(self._g(z).detach()) for z in z_samples]
+                        discriminated_fakes = [self._d(self._g(z, c).detach(), c) for z, c in zip(z_samples, classes)]
                         loss_d_fake = [self._binary_loss(x, y) for x, y in zip(discriminated_fakes, fake_labels)]
                         self._acc_metric.update(fake_labels, discriminated_fakes)
 
@@ -84,8 +91,8 @@ class DCGANTrainer(GANTrainer):
                     ###########################
 
                     with autograd.record():
-                        fakes = [self._g(z) for z in z_samples]
-                        loss_g = [self._binary_loss(self._d(f), y) for f, y in zip(fakes, truth_labels)]
+                        fakes = [self._g(z, c) for z, c in zip(z_samples, classes)]
+                        loss_g = [self._binary_loss(self._d(f, c), y) for f, c, y in zip(fakes, classes, truth_labels)]
                         self._g_loss_metric.update(0, loss_g)
 
                     if (i + 1) % self._g_rounds == 0:
@@ -122,7 +129,7 @@ class DCGANTrainer(GANTrainer):
 
                 # generate batch_size random images each x epochs
                 if global_step % self._opts.extra_interval == 0:
-                    extra_fakes = [self._g(z) for z in fixed_z_samples]
+                    extra_fakes = [self._g(z, c) for z, c in zip(fixed_z_samples, fixed_classes)]
                     tensor_to_viz(writer, extra_fakes, global_step, 'fixed_samples')
                     tensor_to_image(self._outimages, extra_fakes, global_step)
 

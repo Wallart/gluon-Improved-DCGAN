@@ -38,6 +38,10 @@ class Discriminator(gluon.HybridBlock):
         feature_map_size = self.opts.image_size
 
         with self.name_scope():
+            if self.opts.conditional:
+                self._embed = nn.Embedding(input_dim=self.opts.num_classes, output_dim=self.opts.embed_size)
+                self._c_projector = nn.Dense(self.opts.image_size ** 2, in_units=self.opts.embed_size)
+
             self.stages = nn.HybridSequential()
             # We have to produce (? x 4 x 4) features maps at layer n-1, whatever the original image size was
             while feature_map_size > 4:
@@ -65,5 +69,11 @@ class Discriminator(gluon.HybridBlock):
             assert self.stages[-2][-3]._channels == self.opts.ndf * self.opts.image_size // 8
 
     def hybrid_forward(self, F, x, *args, **kwargs):
+        c, = args
+        if c is not None:
+            class_embed = self._embed(c)
+            class_proj = self._c_projector(class_embed).reshape((-1, 1, self.opts.image_size, self.opts.image_size))
+            x = F.concat(x, class_proj, dim=1)
+
         x = self.stages(x)
         return F.reshape(x, shape=-1)

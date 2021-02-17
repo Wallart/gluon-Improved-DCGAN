@@ -17,14 +17,16 @@ if __name__ == '__main__':
     args.images_dir = os.path.expanduser(args.images_dir)
     args.output_gif = os.path.expanduser(args.output_gif)
 
-    images = glob(os.path.join(args.images_dir, f'*.{args.ext}'))
+    images = sorted(glob(os.path.join(args.images_dir, f'*.{args.ext}')))
     assert len(images) > 1, 'No images found.'
 
     idx = args.interval
     with imageio.get_writer(args.output_gif, mode='I') as writer:
-        for _ in tqdm(range(len(images))):
-            img_path = os.path.join(args.images_dir, f'epoch-{idx}.{args.ext}')
-            idx += args.interval
+        # for _ in tqdm(range(len(images))):
+        for img_path in tqdm(images):
+            # img_path = os.path.join(args.images_dir, f'epoch-{idx:4f}.{args.ext}')
+            # print(img_path)
+            # idx += args.interval
             if not os.path.isfile(img_path):
                 continue
 

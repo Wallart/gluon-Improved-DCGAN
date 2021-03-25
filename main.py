@@ -103,7 +103,8 @@ if __name__ == '__main__':
     args.ctx = get_ctx(args)
     if args.action == 'train':
         dataset = datasets[args.dataset_type](args)
-        args.num_classes = len(dataset._dataset.synsets)
+        if args.conditional:
+            args.num_classes = len(dataset._dataset.synsets)
 
         trainer = DCGANTrainer(args)
         trainer.train(dataset.get())
